@@ -1,5 +1,5 @@
 // Client Render System
-import { System, EntityId, Entity, Position, Renderable } from "@shared/ecs";
+import { System, EntityId, Entity, Position, Renderable, Player } from "@shared/ecs";
 
 export class RenderSystem implements System {
   private canvas: HTMLCanvasElement;
@@ -31,12 +31,13 @@ export class RenderSystem implements System {
     for (const entity of renderableEntities) {
       const position = entity.components.get("position") as Position;
       const renderable = entity.components.get("renderable") as Renderable;
+      const player = entity.components.get("player") as Player | undefined;
 
-      this.renderEntity(position, renderable);
+      this.renderEntity(position, renderable, player);
     }
   }
 
-  private renderEntity(position: Position, renderable: Renderable): void {
+  private renderEntity(position: Position, renderable: Renderable, player?: Player): void {
     this.ctx.save();
 
     // Apply transformations
@@ -53,11 +54,18 @@ export class RenderSystem implements System {
     this.ctx.fillStyle = "#ff0000";
     this.ctx.fillRect(-16, -16, 32, 32);
 
-    // Draw entity ID for debugging (only in development)
-    if (process.env.NODE_ENV === 'development') {
+    // Draw player name/ID above the character
+    if (player) {
       this.ctx.fillStyle = "#ffffff";
+      this.ctx.strokeStyle = "#000000";
+      this.ctx.lineWidth = 2;
       this.ctx.font = "12px Arial";
-      this.ctx.fillText(renderable.spriteId, -10, -20);
+      this.ctx.textAlign = "center";
+
+      // Display player ID truncated to first 8 characters
+      const displayName = player.id.substring(0, 8);
+      this.ctx.strokeText(displayName, 0, -25);
+      this.ctx.fillText(displayName, 0, -25);
     }
 
     this.ctx.restore();

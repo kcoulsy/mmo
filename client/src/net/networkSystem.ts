@@ -15,12 +15,19 @@ import {
   PlayerInputMessage,
   PlayerUpdateMessage,
   WorldStateMessage,
+  ChatMessage,
 } from "@shared/messages";
 import { GameClient } from "./client";
 
 export class NetworkSystem implements System {
   private remotePlayers: Map<string, EntityId> = new Map(); // playerId -> entityId
   private localPlayerId?: string;
+  private tempLocalEntityId?: EntityId; // Temporary entity ID before server assigns player ID
+  private onPlayerPositionUpdate?: (position: {
+    x: number;
+    y: number;
+    z: number;
+  }) => void;
   private lastInputTime = 0;
   private inputSendInterval = 50; // Send input every 50ms (20Hz) when active
   private idleInputSendInterval = 1000; // Send input every 1s when idle
@@ -32,6 +39,11 @@ export class NetworkSystem implements System {
   private serverPosition?: { x: number; y: number; z: number };
   private serverVelocity?: { vx: number; vy: number };
   private lastWorldStateHash = "";
+  private onChatMessage?: (message: ChatMessage) => void;
+  private onRemotePlayerPositionUpdate?: (
+    playerId: string,
+    position: { x: number; y: number }
+  ) => void;
 
   constructor(
     private client: GameClient,
@@ -160,10 +172,54 @@ export class NetworkSystem implements System {
     this.serverVelocity = undefined;
   }
 
-  // Set the local player (the client's own player)
-  setLocalPlayer(playerId: string, entityId: EntityId) {
+  // Set the temporary local entity (before server assigns player ID)
+  setTempLocalEntity(entityId: EntityId) {
+    this.tempLocalEntityId = entityId;
+  }
+
+  // Set callback for player position updates
+  setPlayerPositionUpdateCallback(
+    callback: (position: { x: number; y: number; z: number }) => void
+  ) {
+    this.onPlayerPositionUpdate = callback;
+  }
+
+  // Set the server-assigned player ID and update the temp entity
+  setServerPlayerId(playerId: string) {
+    console.log(`[NETWORK] Setting server player ID: ${playerId}`);
     this.localPlayerId = playerId;
-    this.remotePlayers.set(playerId, entityId);
+
+    // If we have a temp entity, update its player component with the server ID
+    if (this.tempLocalEntityId) {
+      const playerComponent = this.world.getComponent(
+        this.tempLocalEntityId,
+        "player"
+      );
+      if (playerComponent) {
+        playerComponent.id = playerId;
+        console.log(`[NETWORK] Updated temp entity player ID to: ${playerId}`);
+      }
+      this.remotePlayers.set(playerId, this.tempLocalEntityId);
+      this.tempLocalEntityId = undefined;
+
+      // Notify the client about the new player ID for future messages
+      this.client.setPlayerId(playerId);
+    }
+  }
+
+  // Set callback for chat messages
+  setChatMessageCallback(callback: (message: ChatMessage) => void) {
+    this.onChatMessage = callback;
+  }
+
+  setRemotePlayerPositionUpdateCallback(
+    callback: (playerId: string, position: { x: number; y: number }) => void
+  ) {
+    this.onRemotePlayerPositionUpdate = callback;
+  }
+
+  getLocalPlayerId(): string | undefined {
+    return this.localPlayerId;
   }
 
   // Get remote player entity by player ID
@@ -196,27 +252,79 @@ export class NetworkSystem implements System {
     this.client.onMessage("WORLD_STATE", (message: WorldStateMessage) => {
       this.handleWorldState(message);
     });
+
+    // Handle chat messages
+    this.client.onMessage("CHAT_MESSAGE", (message: ChatMessage) => {
+      this.handleChatMessage(message);
+    });
   }
 
   private handlePlayerJoin(message: PlayerJoinMessage) {
     const { playerId, playerData } = message;
 
-    // Handle our own player - update position to match server
-    if (playerId === this.localPlayerId) {
-      const localEntityId = this.remotePlayers.get(this.localPlayerId);
-      if (localEntityId) {
-        const position = this.world.getComponent(localEntityId, "position");
-        if (position) {
+    console.log(
+      `[NETWORK] Received PLAYER_JOIN: ${playerId} at position (${playerData.position.x}, ${playerData.position.y})`
+    );
+
+    // If we don't have a localPlayerId yet, this is our player
+    if (!this.localPlayerId) {
+      console.log(`[NETWORK] This is our player join: ${playerId}`);
+      this.setServerPlayerId(playerId);
+
+      // Add or update position to match server
+      if (this.tempLocalEntityId) {
+        // Check if position component already exists
+        let position = this.world.getComponent(
+          this.tempLocalEntityId,
+          "position"
+        );
+
+        if (!position) {
+          // Add position component
+          console.log(
+            `[NETWORK] Adding position component at (${playerData.position.x}, ${playerData.position.y})`
+          );
+          position = {
+            type: "position",
+            x: playerData.position.x,
+            y: playerData.position.y,
+            z: playerData.position.z || 0,
+          };
+          this.world.addComponent(this.tempLocalEntityId, position);
+        } else {
+          // Update existing position
+          console.log(
+            `[NETWORK] Updating position from (${position.x}, ${position.y}) to (${playerData.position.x}, ${playerData.position.y})`
+          );
           position.x = playerData.position.x;
           position.y = playerData.position.y;
           position.z = playerData.position.z || 0;
-          console.log(
-            `Updated local player position to match server: (${position.x}, ${position.y})`
-          );
         }
+
+        console.log(`[NETWORK] Final position: (${position.x}, ${position.y})`);
+
+        // Update the player store position
+        if (this.onPlayerPositionUpdate) {
+          this.onPlayerPositionUpdate({
+            x: position.x,
+            y: position.y,
+            z: position.z,
+          });
+        }
+      } else {
+        console.log(`[NETWORK] No tempLocalEntityId to set position`);
       }
       return;
     }
+
+    // Handle other players joining
+    if (playerId !== this.localPlayerId) {
+      this.createRemotePlayer(message);
+    }
+  }
+
+  private createRemotePlayer(message: PlayerJoinMessage) {
+    const { playerId, playerData } = message;
 
     // Create remote player entity
     const entityId = this.world.createEntity();
@@ -306,6 +414,14 @@ export class NetworkSystem implements System {
       posComponent.x = position.x;
       posComponent.y = position.y;
       posComponent.z = position.z || 0;
+
+      // Update chat bubble position
+      if (this.onRemotePlayerPositionUpdate) {
+        this.onRemotePlayerPositionUpdate(playerId, {
+          x: position.x,
+          y: position.y - 50,
+        });
+      }
     }
 
     // Update velocity component if provided
@@ -568,5 +684,44 @@ export class NetworkSystem implements System {
     }
 
     return hashParts.join("|");
+  }
+
+  private handleChatMessage(message: ChatMessage) {
+    console.log(
+      `[NETWORK] Received chat message: "${message.message}" from ${message.playerName} (mode: ${message.mode})`
+    );
+    // Call the chat message callback if set
+    if (this.onChatMessage) {
+      this.onChatMessage(message);
+    } else {
+      console.log(`[NETWORK] No chat message callback set!`);
+    }
+  }
+
+  // Send a chat message
+  sendChatMessage(
+    message: string,
+    mode: "say" | "guild" | "party" | "global" = "say"
+  ) {
+    console.log(`[CLIENT CHAT] Sending message: "${message}" (mode: ${mode})`);
+
+    if (!this.localPlayerId || !message.trim()) {
+      console.log(
+        `[CLIENT CHAT] Cannot send - localPlayerId: ${this.localPlayerId}, message: "${message}"`
+      );
+      return;
+    }
+
+    const chatMessage: ChatMessage = {
+      type: "CHAT_MESSAGE",
+      timestamp: Date.now(),
+      playerId: this.localPlayerId,
+      playerName: "", // Will be set by server
+      message: message.trim(),
+      mode,
+    };
+
+    console.log(`[CLIENT CHAT] Sending to server:`, chatMessage);
+    this.client.send(chatMessage);
   }
 }

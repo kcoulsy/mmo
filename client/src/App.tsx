@@ -10,16 +10,19 @@ import { GameClient } from './net/client';
 import { NetworkSystem } from './net/networkSystem';
 import { InterpolationSystem } from './net/interpolation';
 import { PlayerJoinRequestMessage } from '../../shared/messages/index';
-import { useGameStore, usePlayerStore } from './stores';
+import { useGameStore, usePlayerStore, useChatStore, useChatBubbleStore } from './stores';
 
 import { UIInterface } from "./ui/ui-interface"
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameInitializedRef = useRef(false);
+  const networkSystemRef = useRef<any>(null);
 
   const { setConnected, setConnectionStatus, updateFPS } = useGameStore();
   const { setPlayer } = usePlayerStore();
+  const { addMessage } = useChatStore();
+  const { addBubble, cleanupExpiredBubbles, updateBubblePosition } = useChatBubbleStore();
 
   useEffect(() => {
     if (gameInitializedRef.current || !canvasRef.current) return;
@@ -36,6 +39,7 @@ export function App() {
     const gameClient = new GameClient('ws://localhost:8080');
     const interpolationSystem = new InterpolationSystem();
     const networkSystem = new NetworkSystem(gameClient, world, interpolationSystem);
+    networkSystemRef.current = networkSystem;
 
     // Add systems
     const renderSystem = new RenderSystem(canvas);
@@ -45,22 +49,58 @@ export function App() {
     // Connect input system to network system
     inputSystem.setNetworkSystem(networkSystem);
 
+    // Set up chat message handling
+    console.log('[APP] Setting up chat message callback');
+    networkSystem.setChatMessageCallback((message) => {
+      console.log('[APP] Chat callback called:', message);
+      addMessage(message);
+
+      // Create chat bubble above the player (if not our own message)
+      if (message.playerId !== networkSystem.getLocalPlayerId()) {
+        // Find the player's position in the world
+        const playerEntities = world.getEntitiesWithComponent('player');
+        const playerEntity = playerEntities.find(entityId => {
+          const playerComponent = world.getComponent(entityId, 'player') as any;
+          return playerComponent && playerComponent.id === message.playerId;
+        });
+
+        if (playerEntity) {
+          const positionComponent = world.getComponent(playerEntity, 'position') as any;
+          if (positionComponent) {
+            // Position bubble above player's head (50px above)
+            const bubblePosition = {
+              x: positionComponent.x,
+              y: positionComponent.y - 50
+            };
+
+            addBubble({
+              playerId: message.playerId,
+              playerName: message.playerName,
+              message: message.message,
+              position: bubblePosition,
+              duration: 5000, // 5 seconds
+            });
+          }
+        }
+      }
+    });
+
+    // Set up player position update callback for chat bubbles
+    networkSystem.setRemotePlayerPositionUpdateCallback((playerId: string, position: { x: number; y: number }) => {
+      updateBubblePosition(playerId, position);
+    });
+
     world.addSystem(inputSystem);
     world.addSystem(movementSystem);
     world.addSystem(networkSystem);
     world.addSystem(interpolationSystem);
     world.addSystem(renderSystem);
 
-    // Create local player entity
+    // Create local player entity (will be updated with server-assigned ID later)
     const localPlayerEntityId = world.createEntity();
-    const localPlayerId = `local_player_${Date.now()}`;
+    const tempPlayerId = `temp_local_${Date.now()}`;
 
-    world.addComponent(localPlayerEntityId, {
-      type: 'position',
-      x: 400,
-      y: 300,
-      z: 0,
-    });
+    // Don't add position component yet - it will be added when we receive server position
     world.addComponent(localPlayerEntityId, {
       type: 'velocity',
       vx: 0,
@@ -74,7 +114,7 @@ export function App() {
     });
     world.addComponent(localPlayerEntityId, {
       type: 'player',
-      id: localPlayerId,
+      id: tempPlayerId,
       name: 'Player',
       isLocal: true,
     });
@@ -89,9 +129,17 @@ export function App() {
       moveSpeed: 100,
     });
 
-    // Update player store with initial data
+    // Tell network system about the temp entity
+    networkSystem.setTempLocalEntity(localPlayerEntityId);
+
+    // Set callback to update player store position
+    networkSystem.setPlayerPositionUpdateCallback((position) => {
+      setPlayer({ position });
+    });
+
+    // Update player store with initial data (will be updated with server ID later)
     setPlayer({
-      id: localPlayerId,
+      id: tempPlayerId,
       name: 'Player',
       stats: {
         hp: 100,
@@ -105,13 +153,10 @@ export function App() {
         experience: 0,
         experienceToNext: 100,
       },
-      position: { x: 400, y: 300, z: 0 },
+      position: { x: 0, y: 0, z: 0 },
       isConnected: false,
       isLocal: true,
     });
-
-    // Set up local player in network system
-    networkSystem.setLocalPlayer(localPlayerId, localPlayerEntityId);
 
     // Connect to server with a small delay
     setTimeout(() => {
@@ -123,14 +168,13 @@ export function App() {
           setConnected(true);
           setConnectionStatus('connected');
           setPlayer({ isConnected: true });
-          gameClient.setPlayerId(localPlayerId);
 
           // Send join request to create player on server
           const joinMessage: PlayerJoinRequestMessage = {
             type: 'PLAYER_JOIN_REQUEST',
             timestamp: Date.now(),
             playerName: 'Player',
-            playerId: localPlayerId,
+            // Don't send playerId - server will assign one
           };
           gameClient.send(joinMessage);
           console.log('Sent join request to server');
@@ -160,6 +204,9 @@ export function App() {
         fpsTime = 0;
       }
 
+      // Clean up expired chat bubbles
+      cleanupExpiredBubbles();
+
       world.update(deltaTime);
       requestAnimationFrame(gameLoop);
     }
@@ -187,7 +234,7 @@ export function App() {
       />
 
       {/* UI Overlay */}
-      <UIInterface />
+      <UIInterface onSendChatMessage={(message, mode) => networkSystemRef.current?.sendChatMessage(message, mode)} />
     </div>
   )
 }

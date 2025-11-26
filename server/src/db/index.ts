@@ -5,7 +5,7 @@ import { Database as DatabaseSchema } from "./schemas/database";
 
 // Create database connection
 const dialect = new SqliteDialect({
-  database: new Database(process.env.DB_PATH || "./emberfall.db"),
+  database: new Database(process.env.DB_PATH || "./ironwild.db"),
 });
 
 export const db = new Kysely<DatabaseSchema>({

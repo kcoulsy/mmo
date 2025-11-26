@@ -13,6 +13,7 @@ import {
   PlayerMoveMessage,
   PlayerUpdateMessage,
   PlayerInputMessage,
+  ChatMessage,
 } from "@shared/messages";
 import { WebSocketServer, ConnectedClient } from "./websocketServer";
 
@@ -43,6 +44,11 @@ export class PlayerManager {
         this.handlePlayerInput(client, message);
       }
     );
+
+    // Handle chat messages
+    this.server.onMessage("CHAT_MESSAGE", (client, message: ChatMessage) => {
+      this.handleChatMessage(client, message);
+    });
   }
 
   // Create a player entity when a client connects
@@ -50,10 +56,8 @@ export class PlayerManager {
     client: ConnectedClient,
     playerData: { name: string; playerId?: string }
   ): EntityId {
-    // Use provided playerId or generate one (in a real game, this might come from database)
-    const playerId =
-      playerData.playerId ||
-      `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Always generate a server-assigned player ID (ignore client-provided ID)
+    const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     client.playerId = playerId;
     this.server.setPlayerForClient(client.id, playerId);
 
@@ -360,5 +364,121 @@ export class PlayerManager {
     };
 
     this.server.sendToClient(client, correctionMessage);
+  }
+
+  // Handle chat messages with distance-based broadcasting for 'say' mode
+  private handleChatMessage(client: ConnectedClient, message: ChatMessage) {
+    console.log(
+      `[CHAT] Received from ${client.playerId}: "${message.message}" (mode: ${message.mode})`
+    );
+
+    if (!client.playerId || !message.message.trim()) {
+      console.log(
+        `[CHAT] Invalid message - playerId: ${client.playerId}, message: "${message.message}"`
+      );
+      return;
+    }
+
+    const entityId = this.playerEntities.get(client.playerId);
+    if (!entityId) {
+      console.log(
+        `[CHAT] Player entity not found for playerId: ${client.playerId}`
+      );
+      return;
+    }
+
+    // Get sender's position for distance-based filtering
+    const senderPosition = this.world.getComponent(entityId, "position");
+    const player = this.world.getComponent(entityId, "player");
+
+    if (!senderPosition || !player) {
+      console.log(
+        `[CHAT] Missing position or player component for playerId: ${client.playerId}`
+      );
+      return;
+    }
+
+    // Create the chat message with sender info
+    const chatMessage: ChatMessage = {
+      type: "CHAT_MESSAGE",
+      timestamp: Date.now(),
+      playerId: client.playerId,
+      playerName: player.name,
+      message: message.message.trim(),
+      mode: message.mode,
+      position: {
+        x: senderPosition.x,
+        y: senderPosition.y,
+        z: senderPosition.z,
+      },
+    };
+
+    // Broadcast based on chat mode
+    switch (message.mode) {
+      case "say":
+        this.broadcastSayMessage(chatMessage, client);
+        break;
+      case "guild":
+        // TODO: Implement guild-based broadcasting
+        this.broadcastGlobalMessage(chatMessage);
+        break;
+      case "party":
+        // TODO: Implement party-based broadcasting
+        this.broadcastGlobalMessage(chatMessage);
+        break;
+      case "global":
+      default:
+        this.broadcastGlobalMessage(chatMessage);
+        break;
+    }
+  }
+
+  // Broadcast 'say' messages only to nearby players
+  private broadcastSayMessage(
+    chatMessage: ChatMessage,
+    senderClient: ConnectedClient
+  ) {
+    if (!chatMessage.position) return;
+
+    const sayRange = 200; // pixels - adjust as needed
+    const { x: senderX, y: senderY } = chatMessage.position;
+
+    // Send to all clients except the sender
+    for (const client of this.server.getClients()) {
+      if (client.id === senderClient.id) continue; // Don't send to sender
+
+      if (client.playerId) {
+        const entityId = this.playerEntities.get(client.playerId);
+        if (entityId) {
+          const position = this.world.getComponent(entityId, "position");
+          if (position) {
+            // Calculate distance
+            const dx = position.x - senderX;
+            const dy = position.y - senderY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+
+            // Only send if within range
+            if (distance <= sayRange) {
+              this.server.sendToClient(client, chatMessage);
+            }
+          }
+        }
+      }
+    }
+
+    // Also send to sender so they see their own message
+    this.server.sendToClient(senderClient, chatMessage);
+
+    console.log(
+      `Player ${chatMessage.playerId} said: "${chatMessage.message}" (range: ${sayRange}px)`
+    );
+  }
+
+  // Broadcast messages to all players
+  private broadcastGlobalMessage(chatMessage: ChatMessage) {
+    this.server.broadcast(chatMessage);
+    console.log(
+      `Player ${chatMessage.playerId} ${chatMessage.mode}: "${chatMessage.message}"`
+    );
   }
 }

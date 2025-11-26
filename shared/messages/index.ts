@@ -8,6 +8,7 @@ export type MessageType =
   | "PLAYER_INPUT"
   | "PLAYER_UPDATE"
   | "WORLD_STATE"
+  | "CHAT_MESSAGE"
   | "PING"
   | "PONG";
 
@@ -22,7 +23,7 @@ export interface NetworkMessage {
 export interface PlayerJoinRequestMessage extends NetworkMessage {
   type: "PLAYER_JOIN_REQUEST";
   playerName: string;
-  playerId: string;
+  playerId?: string; // Optional - server will assign if not provided
 }
 export interface PlayerJoinMessage extends NetworkMessage {
   type: "PLAYER_JOIN";
@@ -110,6 +111,18 @@ export interface PongMessage extends NetworkMessage {
   serverTime: number;
 }
 
+// Chat messages
+export type ChatMode = "say" | "guild" | "party" | "global";
+
+export interface ChatMessage extends NetworkMessage {
+  type: "CHAT_MESSAGE";
+  playerId: string;
+  playerName: string;
+  message: string;
+  mode: ChatMode;
+  position?: { x: number; y: number; z?: number }; // For distance-based filtering
+}
+
 // Union type for all messages
 export type Message =
   | PlayerJoinRequestMessage
@@ -119,6 +132,7 @@ export type Message =
   | PlayerInputMessage
   | PlayerUpdateMessage
   | WorldStateMessage
+  | ChatMessage
   | PingMessage
   | PongMessage;
 

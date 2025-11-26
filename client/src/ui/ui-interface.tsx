@@ -5,10 +5,20 @@ import { ActionBar } from "./action-bar"
 import { BagPanel } from "./bag-panel"
 import { CharacterPanel } from "./character-panel"
 import { FPSStats } from "./fps-stats"
+import { ChatWindow } from "./chat-window"
+import { ExperienceBar } from "./experience-bar"
+import { ChatBubble } from "./chat-bubble"
+import { ChatMode } from "../../../shared/messages"
+import { useChatBubbleStore } from "../stores"
 
-export function UIInterface() {
+interface UIInterfaceProps {
+  onSendChatMessage?: (message: string, mode: ChatMode) => void
+}
+
+export function UIInterface({ onSendChatMessage }: UIInterfaceProps) {
   const [showBags, setShowBags] = useState(false)
   const [showCharacter, setShowCharacter] = useState(false)
+  const { bubbles } = useChatBubbleStore()
   return (
     <div className="relative h-full w-full pointer-events-none">
       {/* Top Left - Player Frame */}
@@ -70,9 +80,20 @@ export function UIInterface() {
         </button>
       </div>
 
+      {/* Bottom Left - Chat Window */}
+      <div className="absolute bottom-20 left-4 pointer-events-auto">
+        <ChatWindow onSendMessage={onSendChatMessage} />
+      </div>
+
       {/* Bottom Center - Action Bar */}
-      <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-auto">
+      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 pointer-events-auto flex gap-1 flex-col">
         <ActionBar />
+        <ExperienceBar />
+      </div>
+
+      {/* Bottom Center - Experience Bar */}
+      <div className="absolute bottom-1 left-1/2 -translate-x-1/2 pointer-events-auto">
+
       </div>
 
       {/* Bag Panel */}
@@ -88,6 +109,17 @@ export function UIInterface() {
           <CharacterPanel onClose={() => setShowCharacter(false)} />
         </div>
       )}
+
+      {/* Chat Bubbles - positioned over the game world */}
+      {bubbles.map((bubble) => (
+        <ChatBubble
+          key={bubble.id}
+          playerName={bubble.playerName}
+          message={bubble.message}
+          position={{ top: bubble.position.y, left: bubble.position.x }}
+          duration={bubble.duration}
+        />
+      ))}
     </div>
   )
 }
