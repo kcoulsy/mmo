@@ -1,0 +1,12 @@
+**/.turbo
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/logs
+**/temp
+**/tmp
+**/cache
+**/backup
+**/archive
+**/backup

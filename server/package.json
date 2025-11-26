@@ -1,0 +1,31 @@
+{
+  "name": "emberfall-server",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "lint": "eslint . --ext ts --report-unused-disable-directives --max-warnings 0",
+    "clean": "rm -rf dist",
+    "db:migrate": "kysely migrate",
+    "db:generate": "kysely generate"
+  },
+  "dependencies": {
+    "kysely": "^0.27.0",
+    "better-sqlite3": "^9.4.0",
+    "ws": "^8.18.0",
+    "msgpackr": "^1.10.0",
+    "tiny-ecs": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.0.0",
+    "@types/better-sqlite3": "^7.6.0",
+    "typescript": "^5.3.0",
+    "tsx": "^4.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0",
+    "prettier": "^3.0.0"
+  }
+}
