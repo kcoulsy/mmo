@@ -27,6 +27,9 @@ async function main() {
   // Initialize player manager
   const playerManager = new PlayerManager(wsServer, world);
 
+  // Connect player manager to WebSocket server for cleanup
+  wsServer.setPlayerManager(playerManager);
+
   // Handle player join requests
   wsServer.onMessage(
     "PLAYER_JOIN_REQUEST",
@@ -60,7 +63,7 @@ async function main() {
 
   // Add systems
   world.addSystem(new CombatSystem());
-  world.addSystem(new MovementSystem());
+  world.addSystem(new MovementSystem(playerManager));
   world.addSystem(new TradeskillSystem());
   world.addSystem(new BroadcastSystem(wsServer, playerManager));
 

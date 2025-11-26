@@ -5,6 +5,7 @@ export type MessageType =
   | "PLAYER_JOIN"
   | "PLAYER_LEAVE"
   | "PLAYER_MOVE"
+  | "PLAYER_INPUT"
   | "PLAYER_UPDATE"
   | "WORLD_STATE"
   | "PING"
@@ -50,18 +51,30 @@ export interface PlayerMoveMessage extends NetworkMessage {
   timestamp: number; // For interpolation
 }
 
+export interface PlayerInputMessage extends NetworkMessage {
+  type: "PLAYER_INPUT";
+  playerId: string;
+  input: {
+    up: boolean;
+    down: boolean;
+    left: boolean;
+    right: boolean;
+  };
+  timestamp: number; // Client timestamp when input was captured
+}
+
 export interface PlayerUpdateMessage extends NetworkMessage {
   type: "PLAYER_UPDATE";
   playerId: string;
   updates: Partial<{
     position: { x: number; y: number; z?: number };
     velocity: { vx: number; vy: number };
-    stats: {
+    stats: Partial<{
       hp: number;
       maxHp: number;
       mp: number;
       maxMp: number;
-    };
+    }>;
     spriteId: string;
     frame: number;
   }>;
@@ -102,6 +115,7 @@ export type Message =
   | PlayerJoinMessage
   | PlayerLeaveMessage
   | PlayerMoveMessage
+  | PlayerInputMessage
   | PlayerUpdateMessage
   | WorldStateMessage
   | PingMessage

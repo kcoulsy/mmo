@@ -12,6 +12,7 @@ import {
   PlayerJoinMessage,
   PlayerLeaveMessage,
   PlayerMoveMessage,
+  PlayerInputMessage,
   PlayerUpdateMessage,
   WorldStateMessage,
 } from "@shared/messages";
@@ -20,6 +21,17 @@ import { GameClient } from "./client";
 export class NetworkSystem implements System {
   private remotePlayers: Map<string, EntityId> = new Map(); // playerId -> entityId
   private localPlayerId?: string;
+  private lastInputTime = 0;
+  private inputSendInterval = 50; // Send input every 50ms (20Hz) when active
+  private idleInputSendInterval = 1000; // Send input every 1s when idle
+  private lastSentInput = { up: false, down: false, left: false, right: false };
+  private pendingInputs: Array<{
+    input: { up: boolean; down: boolean; left: boolean; right: boolean };
+    timestamp: number;
+  }> = [];
+  private serverPosition?: { x: number; y: number; z: number };
+  private serverVelocity?: { vx: number; vy: number };
+  private lastWorldStateHash = "";
 
   constructor(
     private client: GameClient,
@@ -29,30 +41,123 @@ export class NetworkSystem implements System {
     this.setupMessageHandlers();
   }
 
-  update(entities: Map<EntityId, any>, deltaTime: number): void {
-    // Send local player position updates
-    if (this.localPlayerId) {
-      const localEntityId = this.remotePlayers.get(this.localPlayerId);
-      if (localEntityId) {
-        const entity = entities.get(localEntityId);
-        const position = entity?.components.get("position");
-        const velocity = entity?.components.get("velocity");
+  update(entities: Map<EntityId, any>, _deltaTime: number): void {
+    const currentTime = Date.now();
 
-        if (position) {
-          const moveMessage: PlayerMoveMessage = {
-            type: "PLAYER_MOVE",
-            timestamp: Date.now(),
-            playerId: this.localPlayerId,
-            position: { x: position.x, y: position.y, z: position.z },
-            velocity: velocity
-              ? { vx: velocity.vx, vy: velocity.vy }
-              : undefined,
-          };
+    // Check if input has changed
+    const inputChanged = this.hasInputChanged();
 
-          this.client.send(moveMessage);
-        }
-      }
+    // Use different send intervals based on activity
+    const currentInterval = inputChanged
+      ? this.inputSendInterval
+      : this.idleInputSendInterval;
+
+    // Send local player input updates periodically or when input changes
+    if (
+      this.localPlayerId &&
+      (currentTime - this.lastInputTime >= currentInterval || inputChanged)
+    ) {
+      this.sendInputUpdate();
+      this.lastInputTime = currentTime;
+      // Update last sent input to current input
+      this.lastSentInput = { ...this.currentInput };
     }
+
+    // Apply server reconciliation if we have server state
+    if (this.localPlayerId && this.serverPosition) {
+      this.applyServerReconciliation(entities);
+    }
+  }
+
+  // Send current input state to server
+  private sendInputUpdate() {
+    if (!this.localPlayerId) return;
+
+    const inputMessage: PlayerInputMessage = {
+      type: "PLAYER_INPUT",
+      timestamp: Date.now(),
+      playerId: this.localPlayerId,
+      input: this.currentInput,
+    };
+
+    // Store input for reconciliation
+    this.pendingInputs.push({
+      input: inputMessage.input,
+      timestamp: inputMessage.timestamp,
+    });
+
+    // Keep only recent inputs for reconciliation
+    const maxInputs = 10;
+    if (this.pendingInputs.length > maxInputs) {
+      this.pendingInputs.shift();
+    }
+
+    this.client.send(inputMessage);
+  }
+
+  // Update current input state (called by input system)
+  updateInputState(input: {
+    up: boolean;
+    down: boolean;
+    left: boolean;
+    right: boolean;
+  }) {
+    // This will be called by the input system to provide current input state
+    // We store it for when we send input updates
+    this.currentInput = input;
+  }
+
+  // Check if current input differs from last sent input
+  private hasInputChanged(): boolean {
+    return (
+      this.currentInput.up !== this.lastSentInput.up ||
+      this.currentInput.down !== this.lastSentInput.down ||
+      this.currentInput.left !== this.lastSentInput.left ||
+      this.currentInput.right !== this.lastSentInput.right
+    );
+  }
+
+  private currentInput = { up: false, down: false, left: false, right: false };
+
+  // Apply server reconciliation (rubberbanding)
+  private applyServerReconciliation(entities: Map<EntityId, any>) {
+    if (!this.localPlayerId) return;
+
+    const localEntityId = this.remotePlayers.get(this.localPlayerId);
+    if (!localEntityId) return;
+
+    const entity = entities.get(localEntityId);
+    const position = entity?.components.get("position") as any;
+    const velocity = entity?.components.get("velocity") as any;
+
+    if (!position || !this.serverPosition) return;
+
+    // Calculate position error
+    const errorX = this.serverPosition.x - position.x;
+    const errorY = this.serverPosition.y - position.y;
+
+    // If error is significant, rubberband to server position
+    const errorThreshold = 5; // pixels
+    const errorMagnitude = Math.sqrt(errorX * errorX + errorY * errorY);
+
+    if (errorMagnitude > errorThreshold) {
+      // Rubberband: smoothly move towards server position
+      const rubberbandSpeed = 0.1; // How fast to correct (0-1)
+      position.x += errorX * rubberbandSpeed;
+      position.y += errorY * rubberbandSpeed;
+
+      // Reset velocity to match server
+      if (this.serverVelocity && velocity) {
+        velocity.vx = this.serverVelocity.vx;
+        velocity.vy = this.serverVelocity.vy;
+      }
+
+      console.log(`Rubberbanding: error ${errorMagnitude.toFixed(1)}px`);
+    }
+
+    // Clear server position after reconciliation
+    this.serverPosition = undefined;
+    this.serverVelocity = undefined;
   }
 
   // Set the local player (the client's own player)
@@ -167,26 +272,34 @@ export class NetworkSystem implements System {
   private handlePlayerMove(message: PlayerMoveMessage) {
     const { playerId, position, velocity } = message;
 
-    // Skip if this is our own player (we control it locally)
-    if (playerId === this.localPlayerId) return;
+    // Handle server correction for local player
+    if (playerId === this.localPlayerId) {
+      this.serverPosition = {
+        x: position.x,
+        y: position.y,
+        z: position.z || 0,
+      };
+      this.serverVelocity = velocity;
+      return;
+    }
 
     const entityId = this.remotePlayers.get(playerId);
     if (!entityId) return;
 
-    // Use interpolation for smooth movement
-    if (this.interpolationSystem) {
-      this.interpolationSystem.updateTargetPosition(entityId, {
-        x: position.x,
-        y: position.y,
-        z: position.z || 0,
-      });
-    } else {
-      // Fallback: direct position update
-      const posComponent = this.world.getComponent(entityId, "position");
-      if (posComponent) {
-        posComponent.x = position.x;
-        posComponent.y = position.y;
-        posComponent.z = position.z || 0;
+    // TEMP: Use direct position update for debugging
+    const posComponent = this.world.getComponent(entityId, "position");
+    if (posComponent) {
+      posComponent.x = position.x;
+      posComponent.y = position.y;
+      posComponent.z = position.z || 0;
+    }
+
+    // Update velocity component if provided
+    if (velocity) {
+      const velComponent = this.world.getComponent(entityId, "velocity");
+      if (velComponent) {
+        velComponent.vx = velocity.vx;
+        velComponent.vy = velocity.vy;
       }
     }
 
@@ -252,32 +365,64 @@ export class NetworkSystem implements System {
   }
 
   private handleWorldState(message: WorldStateMessage) {
+    // Create a simple hash of the world state to detect changes
+    const stateHash = this.createWorldStateHash(message.players);
+
+    // Only process if the world state actually changed
+    if (stateHash === this.lastWorldStateHash) {
+      return; // Skip processing if nothing changed - no re-renders triggered
+    }
+
+    this.lastWorldStateHash = stateHash;
+
     // Sync all players from server state
     // This is useful for initial connection or resync
     for (const player of message.players) {
+      // Skip updating local player position - we handle that with prediction and reconciliation
+      if (player.id === this.localPlayerId) continue;
+
       const entityId = this.remotePlayers.get(player.id);
 
       if (entityId) {
-        // Update existing player
+        // Update existing remote player - only update if values changed
         const posComponent = this.world.getComponent(entityId, "position");
         if (posComponent) {
-          posComponent.x = player.position.x;
-          posComponent.y = player.position.y;
-          posComponent.z = player.position.z || 0;
+          // Only update if position actually changed
+          if (
+            posComponent.x !== player.position.x ||
+            posComponent.y !== player.position.y ||
+            posComponent.z !== (player.position.z || 0)
+          ) {
+            posComponent.x = player.position.x;
+            posComponent.y = player.position.y;
+            posComponent.z = player.position.z || 0;
+          }
         }
 
         if (player.velocity) {
           const velComponent = this.world.getComponent(entityId, "velocity");
           if (velComponent) {
-            velComponent.vx = player.velocity.vx;
-            velComponent.vy = player.velocity.vy;
+            // Only update if velocity actually changed
+            if (
+              velComponent.vx !== player.velocity.vx ||
+              velComponent.vy !== player.velocity.vy
+            ) {
+              velComponent.vx = player.velocity.vx;
+              velComponent.vy = player.velocity.vy;
+            }
           }
         }
 
         const statsComponent = this.world.getComponent(entityId, "stats");
         if (statsComponent) {
-          statsComponent.hp = player.stats.hp;
-          statsComponent.maxHp = player.stats.maxHp;
+          // Only update if stats actually changed
+          if (
+            statsComponent.hp !== player.stats.hp ||
+            statsComponent.maxHp !== player.stats.maxHp
+          ) {
+            statsComponent.hp = player.stats.hp;
+            statsComponent.maxHp = player.stats.maxHp;
+          }
         }
 
         if (player.spriteId !== undefined || player.frame !== undefined) {
@@ -381,5 +526,33 @@ export class NetworkSystem implements System {
     }
     this.remotePlayers.clear();
     this.localPlayerId = undefined;
+  }
+
+  // Create a simple hash of world state for change detection
+  private createWorldStateHash(
+    players: Array<{
+      id: string;
+      position: { x: number; y: number; z?: number };
+      velocity?: { vx: number; vy: number };
+      stats: { hp: number; maxHp: number; level: number };
+      spriteId?: string;
+      frame?: number;
+    }>
+  ): string {
+    // Sort players by ID for consistent hashing
+    const sortedPlayers = [...players].sort((a, b) => a.id.localeCompare(b.id));
+
+    // Create hash string from key player data
+    const hashParts: string[] = [];
+    for (const player of sortedPlayers) {
+      // Skip local player in hash since we don't update it from world state
+      if (player.id === this.localPlayerId) continue;
+
+      hashParts.push(
+        `${player.id}:${Math.round(player.position.x)},${Math.round(player.position.y)},${player.stats.hp},${player.stats.maxHp}`
+      );
+    }
+
+    return hashParts.join("|");
   }
 }

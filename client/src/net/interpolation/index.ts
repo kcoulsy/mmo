@@ -13,17 +13,35 @@ interface InterpolatedPosition {
 export class InterpolationSystem implements System {
   private interpolatedPositions: Map<EntityId, InterpolatedPosition> = new Map()
   private interpolationTime = 100 // Interpolate over 100ms
+  private velocityPredictions: Map<EntityId, { vx: number; vy: number; lastUpdate: number }> = new Map()
 
   update(entities: Map<EntityId, any>, deltaTime: number): void {
     const currentTime = Date.now()
 
+    // Only process entities that have player components (optimization)
     for (const [entityId, entity] of entities) {
       const player = entity.components.get('player') as Player
-      const position = entity.components.get('position') as Position
-
-      // Only interpolate remote players
       if (!player || player.isLocal) continue
 
+      const position = entity.components.get('position') as Position
+      const velocity = entity.components.get('velocity') as any
+
+      // Check if we have velocity prediction
+      const velocityPrediction = this.velocityPredictions.get(entityId)
+      if (velocityPrediction && velocity) {
+        // Use velocity-based prediction between server updates
+        const timeSinceUpdate = currentTime - velocityPrediction.lastUpdate
+        const maxPredictionTime = 200 // Max prediction time before falling back to interpolation
+
+        if (timeSinceUpdate < maxPredictionTime) {
+          // Predict position based on velocity
+          position.x += velocityPrediction.vx * deltaTime
+          position.y += velocityPrediction.vy * deltaTime
+          continue
+        }
+      }
+
+      // Fall back to interpolation if no velocity prediction or prediction timed out
       const interpolation = this.interpolatedPositions.get(entityId)
       if (interpolation) {
         const elapsed = currentTime - interpolation.startTime
@@ -43,26 +61,31 @@ export class InterpolationSystem implements System {
   }
 
   // Update target position for interpolation
-  updateTargetPosition(entityId: EntityId, targetPosition: { x: number; y: number; z: number }) {
-    const currentInterpolation = this.interpolatedPositions.get(entityId)
-
-    if (currentInterpolation) {
-      // Update existing interpolation
-      currentInterpolation.target = targetPosition
-      currentInterpolation.startTime = Date.now()
-    } else {
-      // Create new interpolation from current position
-      // We'll need to get the current position from the world
-      // For now, assume we start from the current position
-      const startPosition = targetPosition // This will be fixed when we integrate
-
-      this.interpolatedPositions.set(entityId, {
-        current: startPosition,
-        target: targetPosition,
-        startTime: Date.now(),
-        duration: this.interpolationTime
+  updateTargetPosition(entityId: EntityId, targetPosition: { x: number; y: number; z: number }, velocity?: { vx: number; vy: number }, currentPosition?: { x: number; y: number; z: number }) {
+    // Store velocity prediction if provided
+    if (velocity) {
+      this.velocityPredictions.set(entityId, {
+        vx: velocity.vx,
+        vy: velocity.vy,
+        lastUpdate: Date.now()
       })
     }
+
+    // Get current position for interpolation start
+    const currentInterpolation = this.interpolatedPositions.get(entityId)
+    let startPosition = currentPosition || targetPosition
+
+    // If we have an ongoing interpolation, start from its current position
+    if (currentInterpolation && !currentPosition) {
+      startPosition = { ...currentInterpolation.current }
+    }
+
+    this.interpolatedPositions.set(entityId, {
+      current: startPosition,
+      target: targetPosition,
+      startTime: Date.now(),
+      duration: this.interpolationTime
+    })
   }
 
   // Set interpolation time (how long to interpolate between positions)

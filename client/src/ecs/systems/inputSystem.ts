@@ -5,6 +5,7 @@ export class InputSystem implements System {
   private keys: Set<string> = new Set();
   private mousePosition = { x: 0, y: 0 };
   private mouseButtons: Set<number> = new Set();
+  private networkSystem?: any; // NetworkSystem - using any to avoid circular imports
 
   constructor(canvas: HTMLCanvasElement) {
     // Keyboard event listeners
@@ -25,7 +26,25 @@ export class InputSystem implements System {
     });
   }
 
+  // Set the network system to send input updates to
+  setNetworkSystem(networkSystem: any) {
+    this.networkSystem = networkSystem;
+  }
+
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
+    // Calculate current input state
+    const inputState = {
+      up: this.keys.has("KeyW") || this.keys.has("ArrowUp"),
+      down: this.keys.has("KeyS") || this.keys.has("ArrowDown"),
+      left: this.keys.has("KeyA") || this.keys.has("ArrowLeft"),
+      right: this.keys.has("KeyD") || this.keys.has("ArrowRight"),
+    };
+
+    // Send input state to network system
+    if (this.networkSystem) {
+      this.networkSystem.updateInputState(inputState);
+    }
+
     // Find player entity (for now, assume first entity with position and velocity)
     const playerEntity = Array.from(entities.values()).find(
       (entity) =>
@@ -40,10 +59,10 @@ export class InputSystem implements System {
       let vx = 0;
       let vy = 0;
 
-      if (this.keys.has("KeyW") || this.keys.has("ArrowUp")) vy -= 1;
-      if (this.keys.has("KeyS") || this.keys.has("ArrowDown")) vy += 1;
-      if (this.keys.has("KeyA") || this.keys.has("ArrowLeft")) vx -= 1;
-      if (this.keys.has("KeyD") || this.keys.has("ArrowRight")) vx += 1;
+      if (inputState.up) vy -= 1;
+      if (inputState.down) vy += 1;
+      if (inputState.left) vx -= 1;
+      if (inputState.right) vx += 1;
 
       // Normalize diagonal movement
       if (vx !== 0 && vy !== 0) {

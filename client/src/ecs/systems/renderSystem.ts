@@ -53,10 +53,12 @@ export class RenderSystem implements System {
     this.ctx.fillStyle = "#ff0000";
     this.ctx.fillRect(-16, -16, 32, 32);
 
-    // Draw entity ID for debugging
-    this.ctx.fillStyle = "#ffffff";
-    this.ctx.font = "12px Arial";
-    this.ctx.fillText(renderable.spriteId, -10, -20);
+    // Draw entity ID for debugging (only in development)
+    if (process.env.NODE_ENV === 'development') {
+      this.ctx.fillStyle = "#ffffff";
+      this.ctx.font = "12px Arial";
+      this.ctx.fillText(renderable.spriteId, -10, -20);
+    }
 
     this.ctx.restore();
   }
