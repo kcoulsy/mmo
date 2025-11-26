@@ -1,0 +1,21 @@
+# Cursor Rules for MMO Project
+
+## Terminal Command Restrictions
+
+**NEVER run npm commands automatically:**
+- DO NOT run `npm run dev`, `npm run build`, `npm run lint`, or any other npm scripts
+- DO NOT run `npm install` or any package management commands
+- DO NOT start development servers or build processes
+- DO NOT run turbo commands like `turbo run dev` or `turbo run build`
+
+**When testing code:**
+- Ask the user to run servers manually
+- Only make code changes, don't run commands to test them
+- Let the user decide when and how to run their development environment
+
+**Exception:** Only run terminal commands if explicitly requested by the user for specific tasks (like creating directories, moving files, or other non-npm operations).
+
+## Development Workflow
+- Focus on code changes and fixes
+- Let users manage their own development servers and build processes
+- Respect user's control over their development environment

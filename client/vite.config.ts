@@ -15,7 +15,8 @@ export default defineConfig({
     host: true,
     port: 3000,
     hmr: {
-      port: 3001
+      port: 3001,
+      overlay: false // Disable error overlay that might trigger reloads
     }
   },
   resolve: {

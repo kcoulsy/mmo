@@ -1,4 +1,4 @@
-# Emberfall MMO
+# Ironwild MMO
 
 A 2D isometric massively multiplayer online RPG built with TypeScript, HTML5 Canvas, and Node.js.
 

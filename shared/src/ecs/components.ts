@@ -81,6 +81,14 @@ export interface NavAgent {
   speed: number
 }
 
+export interface Player {
+  readonly type: 'player'
+  id: string
+  name: string
+  isLocal?: boolean // True for the client's own player
+  connectionId?: string // WebSocket connection ID (server-side)
+}
+
 // Supporting types
 export interface ItemStack {
   itemId: string
@@ -107,3 +115,4 @@ export type Component =
   | SkillSet
   | Lootable
   | NavAgent
+  | Player
