@@ -130,6 +130,7 @@ export function App() {
             type: 'PLAYER_JOIN_REQUEST',
             timestamp: Date.now(),
             playerName: 'Player',
+            playerId: localPlayerId,
           };
           gameClient.send(joinMessage);
           console.log('Sent join request to server');

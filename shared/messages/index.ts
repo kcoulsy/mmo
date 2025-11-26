@@ -22,6 +22,7 @@ export interface NetworkMessage {
 export interface PlayerJoinRequestMessage extends NetworkMessage {
   type: "PLAYER_JOIN_REQUEST";
   playerName: string;
+  playerId: string;
 }
 export interface PlayerJoinMessage extends NetworkMessage {
   type: "PLAYER_JOIN";

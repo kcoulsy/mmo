@@ -45,6 +45,7 @@ async function main() {
       // Create the player
       playerManager.createPlayer(client, {
         name: message.playerName,
+        playerId: message.playerId,
       });
       console.log(
         `Player ${message.playerName} joined from client ${client.id}`

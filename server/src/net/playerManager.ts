@@ -9,6 +9,7 @@ import {
 } from "@shared/ecs/components";
 import {
   PlayerJoinMessage,
+  PlayerLeaveMessage,
   PlayerMoveMessage,
   PlayerUpdateMessage,
   PlayerInputMessage,
@@ -47,10 +48,12 @@ export class PlayerManager {
   // Create a player entity when a client connects
   createPlayer(
     client: ConnectedClient,
-    playerData: { name: string }
+    playerData: { name: string; playerId?: string }
   ): EntityId {
-    // Generate player ID (in a real game, this might come from database)
-    const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    // Use provided playerId or generate one (in a real game, this might come from database)
+    const playerId =
+      playerData.playerId ||
+      `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     client.playerId = playerId;
     this.server.setPlayerForClient(client.id, playerId);
 
@@ -135,6 +138,15 @@ export class PlayerManager {
       this.world.destroyEntity(entityId);
       this.playerEntities.delete(playerId);
       this.entityPlayers.delete(entityId);
+
+      // Broadcast player leave message to all clients
+      const leaveMessage: PlayerLeaveMessage = {
+        type: "PLAYER_LEAVE",
+        timestamp: Date.now(),
+        playerId,
+      };
+      this.server.broadcast(leaveMessage);
+
       console.log(`Player ${playerId} left the game`);
     }
   }

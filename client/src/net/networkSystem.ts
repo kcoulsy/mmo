@@ -201,8 +201,22 @@ export class NetworkSystem implements System {
   private handlePlayerJoin(message: PlayerJoinMessage) {
     const { playerId, playerData } = message;
 
-    // Skip if this is our own player (we already have it)
-    if (playerId === this.localPlayerId) return;
+    // Handle our own player - update position to match server
+    if (playerId === this.localPlayerId) {
+      const localEntityId = this.remotePlayers.get(this.localPlayerId);
+      if (localEntityId) {
+        const position = this.world.getComponent(localEntityId, "position");
+        if (position) {
+          position.x = playerData.position.x;
+          position.y = playerData.position.y;
+          position.z = playerData.position.z || 0;
+          console.log(
+            `Updated local player position to match server: (${position.x}, ${position.y})`
+          );
+        }
+      }
+      return;
+    }
 
     // Create remote player entity
     const entityId = this.world.createEntity();
