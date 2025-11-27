@@ -10,6 +10,7 @@ import { playerMoveHandler } from "../game/player/handlers/player-move";
 import { chatMessageHandler } from "../game/player/handlers/chat-message";
 import { harvestHandler } from "../game/skills/handlers/harvestHandler";
 import { playerInputHandler } from "src/game/player/handlers/player-input";
+import { castSpellHandler } from "../game/spells/handlers/cast-spell";
 import { MessageType } from "@shared/messages";
 
 export function registerAllHandlers(
@@ -25,6 +26,7 @@ export function registerAllHandlers(
     playerInputHandler,
     chatMessageHandler,
     harvestHandler,
+    castSpellHandler,
   ];
 
   // Register each handler

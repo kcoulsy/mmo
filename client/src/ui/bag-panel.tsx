@@ -1,8 +1,8 @@
 "use client"
 
-import { X } from "lucide-react"
 import { usePlayerStore } from "../stores/playerStore"
 import { ITEM_TEMPLATES } from "@shared/items"
+import { WindowManager } from "./window-manager"
 
 interface BagItem {
   id: number
@@ -40,15 +40,7 @@ export function BagPanel({ onClose }: { onClose: () => void }) {
   })
 
   return (
-    <div className="w-96 bg-card/95 border-2 border-border rounded-lg backdrop-blur-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border">
-        <h2 className="text-foreground font-semibold">Backpack</h2>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
+    <WindowManager title="Backpack" onClose={onClose} width={384} windowId="bag-panel">
       {/* Bag Grid */}
       <div className="p-3">
         <div className="grid grid-cols-8 gap-1">
@@ -68,7 +60,7 @@ export function BagPanel({ onClose }: { onClose: () => void }) {
                   )}
 
                   {/* Tooltip */}
-                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 opacity-0 group-hover:opacity-100 transition-opacity duration-75 pointer-events-none z-10">
                     <div className="bg-card/95 border border-border rounded px-2 py-1 backdrop-blur-sm whitespace-nowrap">
                       <p
                         className={`text-xs font-semibold ${item.rarity === "legendary"
@@ -100,6 +92,6 @@ export function BagPanel({ onClose }: { onClose: () => void }) {
         </span>
         <span className="text-accent text-xs font-semibold">💰 0 Gold</span>
       </div>
-    </div>
+    </WindowManager>
   )
 }

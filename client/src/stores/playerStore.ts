@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { PlayerSpell, SpellTemplate } from "../../../shared/spells";
 
 export interface PlayerStats {
   hp: number;
@@ -47,6 +48,11 @@ export interface InventoryState {
   maxSlots: number;
 }
 
+export interface SpellbookState {
+  spells: PlayerSpell[];
+  availableSpells: Record<string, SpellTemplate>;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -57,6 +63,7 @@ export interface PlayerState {
   target?: TargetInfo | null;
   tradeskills: Tradeskill[];
   inventory: InventoryState;
+  spellbook: SpellbookState;
 }
 
 interface PlayerStore extends PlayerState {
@@ -75,6 +82,10 @@ interface PlayerStore extends PlayerState {
   addInventoryItem: (slot: number, item: InventoryItem) => void;
   removeInventoryItem: (slot: number) => void;
   updateInventoryItem: (slot: number, updates: Partial<InventoryItem>) => void;
+  updateSpellbook: (spellbook: SpellbookState) => void;
+  addSpell: (spell: PlayerSpell) => void;
+  updateSpell: (spellId: string, updates: Partial<PlayerSpell>) => void;
+  setSpellCooldown: (spellId: string, cooldownUntil: number) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -122,6 +133,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
   inventory: {
     slots: new Array(32).fill(null),
     maxSlots: 32,
+  },
+  spellbook: {
+    spells: [],
+    availableSpells: {},
   },
 
   setPlayer: (player) => set((state) => ({ ...state, ...player })),
@@ -226,6 +241,36 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           index === slot && existingItem
             ? { ...existingItem, ...updates }
             : existingItem
+        ),
+      },
+    })),
+
+  updateSpellbook: (spellbook) => set({ spellbook }),
+
+  addSpell: (spell) =>
+    set((state) => ({
+      spellbook: {
+        ...state.spellbook,
+        spells: [...state.spellbook.spells, spell],
+      },
+    })),
+
+  updateSpell: (spellId, updates) =>
+    set((state) => ({
+      spellbook: {
+        ...state.spellbook,
+        spells: state.spellbook.spells.map((spell) =>
+          spell.spellId === spellId ? { ...spell, ...updates } : spell
+        ),
+      },
+    })),
+
+  setSpellCooldown: (spellId, cooldownUntil) =>
+    set((state) => ({
+      spellbook: {
+        ...state.spellbook,
+        spells: state.spellbook.spells.map((spell) =>
+          spell.spellId === spellId ? { ...spell, cooldownUntil } : spell
         ),
       },
     })),

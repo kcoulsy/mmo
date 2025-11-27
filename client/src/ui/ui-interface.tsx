@@ -17,10 +17,11 @@ import { useChatBubbleStore, useKeybindStore, useUIStore } from "../stores"
 interface UIInterfaceProps {
   onSendChatMessage?: (message: string, mode: ChatMode) => void
   onDisconnect?: () => void
+  onCastSpell?: (spellId: string) => void
   showGameMenu?: boolean
 }
 
-export function UIInterface({ onSendChatMessage, onDisconnect, showGameMenu = false }: UIInterfaceProps) {
+export function UIInterface({ onSendChatMessage, onDisconnect, onCastSpell, showGameMenu = false }: UIInterfaceProps) {
   const { bubbles } = useChatBubbleStore()
   const { showKeybindSettings } = useKeybindStore()
   const { showBags, showCharacter, showTradeskills } = useUIStore()
@@ -109,7 +110,7 @@ export function UIInterface({ onSendChatMessage, onDisconnect, showGameMenu = fa
 
       {/* Bottom Center - Action Bar */}
       <div className="absolute bottom-1 left-1/2 -translate-x-1/2 pointer-events-auto flex gap-1 flex-col">
-        <ActionBar />
+        <ActionBar onCastSpell={onCastSpell} />
         <ExperienceBar />
       </div>
 
@@ -120,23 +121,17 @@ export function UIInterface({ onSendChatMessage, onDisconnect, showGameMenu = fa
 
       {/* Bag Panel */}
       {showBags && (
-        <div className="absolute top-1/2 right-4 -translate-y-1/2 pointer-events-auto">
-          <BagPanel onClose={() => useUIStore.getState().toggleBags()} />
-        </div>
+        <BagPanel onClose={() => useUIStore.getState().toggleBags()} />
       )}
 
       {/* Tradeskill Panel */}
       {showTradeskills && (
-        <div className="absolute top-1/2 left-20 -translate-y-1/2 pointer-events-auto">
-          <TradeskillPanel onClose={() => useUIStore.getState().toggleTradeskills()} />
-        </div>
+        <TradeskillPanel onClose={() => useUIStore.getState().toggleTradeskills()} />
       )}
 
       {/* Character Panel */}
       {showCharacter && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto">
-          <CharacterPanel onClose={() => useUIStore.getState().toggleCharacter()} />
-        </div>
+        <CharacterPanel onClose={() => useUIStore.getState().toggleCharacter()} />
       )}
 
       {/* Chat Bubbles - positioned over the game world */}

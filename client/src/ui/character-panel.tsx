@@ -1,6 +1,6 @@
 "use client"
 
-import { X } from "lucide-react"
+import { WindowManager } from "./window-manager"
 
 interface EquipmentSlot {
   slot: string
@@ -47,18 +47,7 @@ export function CharacterPanel({ onClose }: { onClose: () => void }) {
   ]
 
   return (
-    <div className="w-[600px] bg-card/95 border-2 border-border rounded-lg backdrop-blur-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-border">
-        <div>
-          <h2 className="text-foreground font-semibold text-lg">Shadowblade</h2>
-          <p className="text-muted-foreground text-sm">Level 85 Rogue</p>
-        </div>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
+    <WindowManager title="Character" onClose={onClose} width={600} windowId="character-panel">
       <div className="p-4 flex gap-6">
         {/* Left Side - Character Model */}
         <div className="flex-shrink-0">
@@ -130,6 +119,6 @@ export function CharacterPanel({ onClose }: { onClose: () => void }) {
           </div>
         </div>
       </div>
-    </div>
+    </WindowManager>
   )
 }

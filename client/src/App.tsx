@@ -24,6 +24,7 @@ export function App() {
   const animationFrameRef = useRef<number | null>(null);
   const systemsInitializedRef = useRef<boolean>(false);
   const inputSystemRef = useRef<any>(null);
+  const renderSystemRef = useRef<any>(null);
 
   const [showGameMenu, setShowGameMenu] = useState(false);
 
@@ -47,6 +48,31 @@ export function App() {
     initializeGame();
   }, [isLoggedIn]);
 
+  // Handle canvas resize
+  useEffect(() => {
+    if (!isLoggedIn || !canvasRef.current) return;
+
+    const handleResize = () => {
+      if (canvasRef.current) {
+        canvasRef.current.width = window.innerWidth;
+        canvasRef.current.height = window.innerHeight;
+        canvasRef.current.style.width = window.innerWidth + 'px';
+        canvasRef.current.style.height = window.innerHeight + 'px';
+
+        // Notify render system about the size change
+        if (renderSystemRef.current) {
+          renderSystemRef.current.updateCanvasSize();
+        }
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, [isLoggedIn]);
+
 
   // Handle disconnects - this will be set up in the network system
 
@@ -68,6 +94,7 @@ export function App() {
 
     // Add systems
     const renderSystem = new RenderSystem(canvas);
+    renderSystemRef.current = renderSystem;
     const movementSystem = new MovementSystem();
     const inputSystem = new InputSystem(canvas);
     inputSystemRef.current = inputSystem;
@@ -399,19 +426,21 @@ export function App() {
   }
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden">
+    <div className="fixed inset-0 overflow-hidden">
       {/* Game Canvas */}
       <canvas
         ref={canvasRef}
         className="absolute inset-0 pointer-events-auto"
         style={{
           imageRendering: 'pixelated',
+          display: 'block',
         }}
       />
 
       {/* UI Overlay */}
       <UIInterface
         onSendChatMessage={(message, mode) => networkSystemRef.current?.sendChatMessage(message, mode)}
+        onCastSpell={(spellId) => networkSystemRef.current?.castSpell(spellId)}
         onDisconnect={handleDisconnect}
         showGameMenu={showGameMenu}
       />

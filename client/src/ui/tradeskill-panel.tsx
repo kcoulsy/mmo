@@ -1,9 +1,10 @@
 "use client"
 
-import { X, ChevronLeft } from "lucide-react"
+import { ChevronLeft } from "lucide-react"
 import { useState } from "react"
 import { usePlayerStore } from "../stores"
 import { Tradeskill } from "../stores/playerStore"
+import { WindowManager } from "./window-manager"
 
 interface TradeskillPanelProps {
   onClose: () => void
@@ -15,48 +16,29 @@ export function TradeskillPanel({ onClose }: TradeskillPanelProps) {
 
   if (selectedSkill) {
     return (
-      <div className="w-80 bg-card/95 border-2 border-border rounded-lg backdrop-blur-sm">
-        {/* Header */}
-        <div className="flex items-center justify-between p-3 border-b border-border">
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setSelectedSkill(null)}
-              className="text-muted-foreground hover:text-foreground transition-colors"
-            >
-              <ChevronLeft className="w-5 h-5" />
-            </button>
-            <h2 className="text-foreground font-semibold">{selectedSkill.name}</h2>
-          </div>
-          <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {/* Skill Detail View */}
+      <WindowManager title={selectedSkill.name} onClose={onClose} width={320} windowId={`tradeskill-${selectedSkill.name}`}>
         <div className="p-3">
+          <button
+            onClick={() => setSelectedSkill(null)}
+            className="flex items-center gap-1 text-muted-foreground hover:text-foreground transition-colors mb-3 text-sm"
+          >
+            <ChevronLeft className="w-4 h-4" />
+            Back to Tradeskills
+          </button>
           <SkillDetailView skill={selectedSkill} />
         </div>
-      </div>
+      </WindowManager>
     )
   }
 
   return (
-    <div className="w-80 bg-card/95 border-2 border-border rounded-lg backdrop-blur-sm">
-      {/* Header */}
-      <div className="flex items-center justify-between p-3 border-b border-border">
-        <h2 className="text-foreground font-semibold">Tradeskills</h2>
-        <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors">
-          <X className="w-5 h-5" />
-        </button>
-      </div>
-
-      {/* Tradeskill List */}
+    <WindowManager title="Tradeskills" onClose={onClose} width={320} windowId="tradeskill-panel">
       <div className="p-3 space-y-3">
         {tradeskills.map((skill) => (
           <TradeskillItem key={skill.name} skill={skill} onClick={() => setSelectedSkill(skill)} />
         ))}
       </div>
-    </div>
+    </WindowManager>
   )
 }
 

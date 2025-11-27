@@ -14,15 +14,37 @@ export class RenderSystem implements System {
   private ctx: CanvasRenderingContext2D;
   private cameraX: number = 0;
   private cameraY: number = 0;
+  private cameraZoom: number = 1;
+  private minZoom: number = 0.5;
+  private maxZoom: number = 2.0;
   private lastLogTime: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
+    this.setupZoomControls();
+  }
+
+  private setupZoomControls(): void {
+    // Prevent default scroll behavior and handle zoom
+    this.canvas.addEventListener('wheel', (e: WheelEvent) => {
+      e.preventDefault();
+
+      // Zoom in/out based on wheel delta
+      const zoomSpeed = 0.1;
+      const delta = e.deltaY > 0 ? -zoomSpeed : zoomSpeed;
+
+      this.cameraZoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.cameraZoom + delta));
+    }, { passive: false });
   }
 
   getCameraPosition(): { x: number; y: number } {
     return { x: this.cameraX, y: this.cameraY };
+  }
+
+  updateCanvasSize(): void {
+    // This will be called when the canvas is resized
+    // The camera boundaries will automatically adjust based on canvas.width/height
   }
 
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
@@ -31,6 +53,15 @@ export class RenderSystem implements System {
 
     // Apply camera transformation to the entire rendering context
     this.ctx.save();
+
+    // Apply zoom from center of screen
+    const centerX = this.canvas.width / 2;
+    const centerY = this.canvas.height / 2;
+    this.ctx.translate(centerX, centerY);
+    this.ctx.scale(this.cameraZoom, this.cameraZoom);
+    this.ctx.translate(-centerX, -centerY);
+
+    // Apply camera position
     this.ctx.translate(-this.cameraX, -this.cameraY);
 
     // Clear canvas and draw isometric grid background
@@ -112,9 +143,19 @@ export class RenderSystem implements System {
       targetCameraY = playerPosition.y - bottomBoundary;
     }
 
-    // Move camera towards target position instantly
-    this.cameraX = targetCameraX;
-    this.cameraY = targetCameraY;
+    // Smoothly interpolate camera position towards target
+    // Calculate distance from current to target camera position
+    const distanceX = Math.abs(targetCameraX - this.cameraX);
+    const distanceY = Math.abs(targetCameraY - this.cameraY);
+    const totalDistance = Math.sqrt(distanceX * distanceX + distanceY * distanceY);
+
+    // Use adaptive lerp factor: faster when player is further from ideal position
+    // This ensures the camera keeps up with fast-moving players
+    const baseLerpFactor = 0.15;
+    const adaptiveLerpFactor = Math.min(baseLerpFactor + (totalDistance / 1000), 0.5);
+
+    this.cameraX += (targetCameraX - this.cameraX) * adaptiveLerpFactor;
+    this.cameraY += (targetCameraY - this.cameraY) * adaptiveLerpFactor;
   }
 
   private drawIsometricGrid(): void {

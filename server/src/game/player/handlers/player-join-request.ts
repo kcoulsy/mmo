@@ -1,5 +1,6 @@
-import { PlayerJoinRequestMessage, WorldStateMessage } from "@shared/messages";
+import { PlayerJoinRequestMessage, WorldStateMessage, SpellbookUpdateMessage } from "@shared/messages";
 import { registerHandler } from "../../../core/types";
+import { spellManager } from "../../spells/managers/spell-manager";
 
 export const playerJoinHandler = registerHandler(
   "PLAYER_JOIN_REQUEST",
@@ -67,6 +68,25 @@ export const playerJoinHandler = registerHandler(
         entities: currentEntities,
       };
       world.sendToSession(client.id, worldStateMessage);
+
+      // Initialize player spellbook based on level
+      spellManager.initializePlayerSpellbook(player.id, player.stats.level);
+
+      // Send spellbook to player
+      const playerSpells = spellManager.getPlayerSpells(player.id);
+      const spellbookMessage: SpellbookUpdateMessage = {
+        type: "SPELLBOOK_UPDATE",
+        timestamp: Date.now(),
+        playerId: player.id,
+        spells: playerSpells.map((spell) => ({
+          spellId: spell.spellId,
+          level: spell.level,
+          cooldownUntil: spell.cooldownUntil > Date.now() ? spell.cooldownUntil : undefined,
+        })),
+      };
+      world.sendToSession(client.id, spellbookMessage);
+
+      console.log(`[SPELLS] Initialized spellbook for ${player.name} with ${playerSpells.length} spells`);
     } catch (error) {
       console.error(`Error creating player ${playerName}:`, error);
     }

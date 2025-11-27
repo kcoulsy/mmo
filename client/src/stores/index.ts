@@ -6,6 +6,7 @@ export type {
   Tradeskill,
   TargetInfo,
   InventoryState,
+  SpellbookState,
 } from "./playerStore";
 export { useUIStore } from "./uiStore";
 export { useGameStore } from "./gameStore";

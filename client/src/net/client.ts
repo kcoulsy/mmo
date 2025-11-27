@@ -103,7 +103,9 @@ export class GameClient {
 
   // Send a message to the server
   send(message: Message) {
-    console.log(`[CLIENT] Attempting to send message type: ${message.type}, WebSocket state: ${this.ws?.readyState}, connected: ${this.connectionState.connected}`);
+    console.log(
+      `[CLIENT] Attempting to send message type: ${message.type}, WebSocket state: ${this.ws?.readyState}, connected: ${this.connectionState.connected}`
+    );
     if (this.ws?.readyState === WebSocket.OPEN) {
       try {
         const data = pack(message);
@@ -179,7 +181,7 @@ export class GameClient {
         };
         this.send(pingMessage);
       }
-    }, 1000); // Ping every second
+    }, 60000); // Ping every minute
   }
 
   private stopPingInterval() {

@@ -20,9 +20,14 @@ import {
   InventoryUpdateMessage,
   HarvestResultMessage,
   GameObjectUpdateMessage,
+  SpellbookUpdateMessage,
+  SpellCastResultMessage,
+  SpellEffectMessage,
 } from "@shared/messages";
 import { ITEM_TEMPLATES } from "@shared/items";
 import { GameClient } from "./client";
+import { usePlayerStore } from "../stores";
+import { getSpellsUnlockedAtLevel, SPELL_TEMPLATES } from "@shared/src/spells";
 
 export class NetworkSystem implements System {
   private remotePlayers: Map<string, EntityId> = new Map(); // playerId -> entityId
@@ -59,7 +64,6 @@ export class NetworkSystem implements System {
   }) => void;
   private lastInputTime = 0;
   private inputSendInterval = 50; // Send input every 50ms (20Hz) when active
-  private idleInputSendInterval = 1000; // Send input every 1s when idle
   private lastSentInput = { up: false, down: false, left: false, right: false };
   private pendingInputs: Array<{
     input: { up: boolean; down: boolean; left: boolean; right: boolean };
@@ -74,6 +78,28 @@ export class NetworkSystem implements System {
     position: { x: number; y: number }
   ) => void;
   private onPlayerJoined?: () => void;
+  private onSpellbookUpdate?: (
+    spells: Array<{ spellId: string; level: number; cooldownUntil?: number }>
+  ) => void;
+  private onSpellCastResult?: (result: {
+    spellId: string;
+    success: boolean;
+    reason?: string;
+    cooldownRemaining?: number;
+  }) => void;
+  private onSpellEffect?: (effect: {
+    spellId: string;
+    casterId: string;
+    targetEntityId?: string;
+    targetPosition?: { x: number; y: number; z?: number };
+    effects: Array<{
+      type: string;
+      targetEntityId: string;
+      amount?: number;
+      buffType?: string;
+      duration?: number;
+    }>;
+  }) => void;
 
   constructor(
     private client: GameClient,
@@ -90,20 +116,25 @@ export class NetworkSystem implements System {
     // Check if input has changed
     const inputChanged = this.hasInputChanged();
 
-    // Use different send intervals based on activity
-    const currentInterval = inputChanged
-      ? this.inputSendInterval
-      : this.idleInputSendInterval;
+    // Check if player is actively moving (has any direction input)
+    const isMoving =
+      this.currentInput.up ||
+      this.currentInput.down ||
+      this.currentInput.left ||
+      this.currentInput.right;
 
-    // Send local player input updates periodically or when input changes
-    if (
-      this.localPlayerId &&
-      (currentTime - this.lastInputTime >= currentInterval || inputChanged)
-    ) {
-      this.sendInputUpdate();
-      this.lastInputTime = currentTime;
-      // Update last sent input to current input
-      this.lastSentInput = { ...this.currentInput };
+    // Only send input updates when the player is actually moving
+    if (this.localPlayerId && isMoving) {
+      // Send immediately when input changes, or periodically while moving
+      if (
+        inputChanged ||
+        currentTime - this.lastInputTime >= this.inputSendInterval
+      ) {
+        this.sendInputUpdate();
+        this.lastInputTime = currentTime;
+        // Update last sent input to current input
+        this.lastSentInput = { ...this.currentInput };
+      }
     }
 
     // Apply server reconciliation if we have server state
@@ -374,6 +405,30 @@ export class NetworkSystem implements System {
       }
     );
 
+    // Handle spellbook updates
+    this.client.onMessage(
+      "SPELLBOOK_UPDATE" as any,
+      (message: SpellbookUpdateMessage) => {
+        this.handleSpellbookUpdate(message);
+      }
+    );
+
+    // Handle spell cast results
+    this.client.onMessage(
+      "SPELL_CAST_RESULT" as any,
+      (message: SpellCastResultMessage) => {
+        this.handleSpellCastResult(message);
+      }
+    );
+
+    // Handle spell effects
+    this.client.onMessage(
+      "SPELL_EFFECT" as any,
+      (message: SpellEffectMessage) => {
+        this.handleSpellEffect(message);
+      }
+    );
+
     // Handle game object updates (removal, deactivation, etc.)
     this.client.onMessage(
       "GAME_OBJECT_UPDATE" as any,
@@ -459,6 +514,26 @@ export class NetworkSystem implements System {
       }
 
       this.setServerPlayerId(playerId);
+
+      // Initialize spells for the player based on level
+      const playerStore = usePlayerStore.getState();
+      const playerStats = playerStore.stats;
+      const unlockedSpells = getSpellsUnlockedAtLevel(
+        playerStats.level,
+        SPELL_TEMPLATES
+      );
+
+      const playerSpells = unlockedSpells.map((spell) => ({
+        spellId: spell.id,
+        level: 1,
+        experience: 0,
+        cooldownUntil: 0,
+      }));
+
+      playerStore.updateSpellbook({
+        spells: playerSpells,
+        availableSpells: SPELL_TEMPLATES,
+      });
 
       // Notify that player has successfully joined with initial data
       if (this.onPlayerJoined) {
@@ -988,6 +1063,61 @@ export class NetworkSystem implements System {
     }
   }
 
+  private handleSpellbookUpdate(message: SpellbookUpdateMessage) {
+    const { spells } = message;
+
+    // Update the player's spellbook in the store
+    const playerStore = usePlayerStore.getState();
+    playerStore.updateSpellbook({
+      spells: spells.map((spell) => ({
+        spellId: spell.spellId,
+        level: spell.level,
+        experience: 0, // TODO: Add experience tracking if needed
+        cooldownUntil: spell.cooldownUntil || 0,
+      })),
+      availableSpells: {}, // TODO: Load available spells from server
+    });
+
+    // Call the callback if set
+    if (this.onSpellbookUpdate) {
+      this.onSpellbookUpdate(spells);
+    }
+  }
+
+  private handleSpellCastResult(message: SpellCastResultMessage) {
+    const { spellId, success, reason, cooldownRemaining } = message;
+
+    if (!success && cooldownRemaining) {
+      // Update spell cooldown in the store
+      const playerStore = usePlayerStore.getState();
+      const cooldownUntil = Date.now() + cooldownRemaining;
+      playerStore.setSpellCooldown(spellId, cooldownUntil);
+    }
+
+    // Call the callback if set
+    if (this.onSpellCastResult) {
+      this.onSpellCastResult({ spellId, success, reason, cooldownRemaining });
+    }
+  }
+
+  private handleSpellEffect(message: SpellEffectMessage) {
+    const { spellId, casterId, targetEntityId, targetPosition, effects } =
+      message;
+
+    // Call the callback if set
+    if (this.onSpellEffect) {
+      this.onSpellEffect({
+        spellId,
+        casterId,
+        targetEntityId,
+        targetPosition,
+        effects,
+      });
+    }
+
+    // TODO: Apply visual effects, animations, etc.
+  }
+
   // Send a harvest request
   harvestObject(clientEntityId: string) {
     if (!this.localPlayerId) {
@@ -1029,6 +1159,28 @@ export class NetworkSystem implements System {
     };
 
     this.client.send(chatMessage);
+  }
+
+  // Cast a spell
+  castSpell(
+    spellId: string,
+    targetEntityId?: string,
+    targetPosition?: { x: number; y: number; z?: number }
+  ) {
+    if (!this.localPlayerId) {
+      return;
+    }
+
+    const castMessage = {
+      type: "CAST_SPELL" as const,
+      timestamp: Date.now(),
+      id: `cast_${Date.now()}`,
+      spellId,
+      targetEntityId,
+      targetPosition,
+    };
+
+    this.client.send(castMessage);
   }
 
   private setupDisconnectHandling() {
