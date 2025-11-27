@@ -1,4 +1,4 @@
-import { useState } from "react"
+// No React imports needed - using stores
 import { PlayerFrame } from "./player-frame"
 import { TargetFrame } from "./target-frame"
 import { ActionBar } from "./action-bar"
@@ -9,18 +9,21 @@ import { FPSStats } from "./fps-stats"
 import { ChatWindow } from "./chat-window"
 import { ExperienceBar } from "./experience-bar"
 import { ChatBubble } from "./chat-bubble"
+import { GameMenu } from "./game-menu"
+import { KeybindSettings } from "./keybind-settings"
 import { ChatMode } from "../../../shared/messages"
-import { useChatBubbleStore } from "../stores"
+import { useChatBubbleStore, useKeybindStore, useUIStore } from "../stores"
 
 interface UIInterfaceProps {
   onSendChatMessage?: (message: string, mode: ChatMode) => void
+  onDisconnect?: () => void
+  showGameMenu?: boolean
 }
 
-export function UIInterface({ onSendChatMessage }: UIInterfaceProps) {
-  const [showBags, setShowBags] = useState(false)
-  const [showCharacter, setShowCharacter] = useState(false)
-  const [showTradeskills, setShowTradeskills] = useState(false)
+export function UIInterface({ onSendChatMessage, onDisconnect, showGameMenu = false }: UIInterfaceProps) {
   const { bubbles } = useChatBubbleStore()
+  const { showKeybindSettings } = useKeybindStore()
+  const { showBags, showCharacter, showTradeskills } = useUIStore()
   return (
     <div className="relative h-full w-full pointer-events-none">
       {/* Top Left - Player Frame */}
@@ -51,7 +54,7 @@ export function UIInterface({ onSendChatMessage }: UIInterfaceProps) {
       {/* Bottom Right - Bag Button */}
       <div className="absolute bottom-24 right-4 pointer-events-auto">
         <button
-          onClick={() => setShowBags(!showBags)}
+          onClick={() => useUIStore.getState().toggleBags()}
           className="w-12 h-12 bg-card/90 border-2 border-border rounded-lg backdrop-blur-sm hover:border-primary transition-colors flex items-center justify-center"
         >
           <svg className="w-6 h-6 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -68,7 +71,7 @@ export function UIInterface({ onSendChatMessage }: UIInterfaceProps) {
       {/* Bottom Right Above Character - Tradeskill Button */}
       <div className="absolute bottom-56 right-4 pointer-events-auto">
         <button
-          onClick={() => setShowTradeskills(!showTradeskills)}
+          onClick={() => useUIStore.getState().toggleTradeskills()}
           className="w-12 h-12 bg-card/90 border-2 border-border rounded-lg backdrop-blur-sm hover:border-primary transition-colors flex items-center justify-center"
         >
           <svg className="w-6 h-6 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -85,7 +88,7 @@ export function UIInterface({ onSendChatMessage }: UIInterfaceProps) {
       {/* Bottom Right Above Bag - Character Button */}
       <div className="absolute bottom-40 right-4 pointer-events-auto">
         <button
-          onClick={() => setShowCharacter(!showCharacter)}
+          onClick={() => useUIStore.getState().toggleCharacter()}
           className="w-12 h-12 bg-card/90 border-2 border-border rounded-lg backdrop-blur-sm hover:border-primary transition-colors flex items-center justify-center"
         >
           <svg className="w-6 h-6 text-foreground" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -118,21 +121,21 @@ export function UIInterface({ onSendChatMessage }: UIInterfaceProps) {
       {/* Bag Panel */}
       {showBags && (
         <div className="absolute top-1/2 right-4 -translate-y-1/2 pointer-events-auto">
-          <BagPanel onClose={() => setShowBags(false)} />
+          <BagPanel onClose={() => useUIStore.getState().toggleBags()} />
         </div>
       )}
 
       {/* Tradeskill Panel */}
       {showTradeskills && (
         <div className="absolute top-1/2 left-20 -translate-y-1/2 pointer-events-auto">
-          <TradeskillPanel onClose={() => setShowTradeskills(false)} />
+          <TradeskillPanel onClose={() => useUIStore.getState().toggleTradeskills()} />
         </div>
       )}
 
       {/* Character Panel */}
       {showCharacter && (
         <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 pointer-events-auto">
-          <CharacterPanel onClose={() => setShowCharacter(false)} />
+          <CharacterPanel onClose={() => useUIStore.getState().toggleCharacter()} />
         </div>
       )}
 
@@ -146,6 +149,20 @@ export function UIInterface({ onSendChatMessage }: UIInterfaceProps) {
           duration={bubble.duration}
         />
       ))}
+
+      {/* Game Menu */}
+      {showGameMenu && (
+        <>
+          <GameMenu onDisconnect={onDisconnect} />
+        </>
+      )}
+
+      {/* Keybind Settings */}
+      {showKeybindSettings && (
+        <>
+          <KeybindSettings />
+        </>
+      )}
     </div>
   )
 }

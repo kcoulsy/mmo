@@ -19,7 +19,7 @@
     "noFallthroughCasesInSwitch": true,
     "baseUrl": ".",
     "paths": {
-      "@shared/*": ["../shared/src/*"],
+      "@shared/*": ["../shared/dist/*"],
       "@shared/messages": ["../shared/messages/index"]
     }
   },

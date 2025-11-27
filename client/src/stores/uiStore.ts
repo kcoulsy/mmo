@@ -25,6 +25,8 @@ export interface UIState {
   showCharacter: boolean;
   showSettings: boolean;
   showMinimap: boolean;
+  showBags: boolean;
+  showTradeskills: boolean;
 
   // Chat
   chatMessages: ChatMessage[];
@@ -48,6 +50,8 @@ interface UIStore extends UIState {
   toggleCharacter: () => void;
   toggleSettings: () => void;
   toggleMinimap: () => void;
+  toggleBags: () => void;
+  toggleTradeskills: () => void;
 
   // Chat functions
   addChatMessage: (message: Omit<ChatMessage, 'id'>) => void;
@@ -74,6 +78,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
   showCharacter: false,
   showSettings: false,
   showMinimap: true,
+  showBags: false,
+  showTradeskills: false,
 
   chatMessages: [
     {
@@ -137,6 +143,8 @@ export const useUIStore = create<UIStore>((set, get) => ({
   toggleCharacter: () => set((state) => ({ showCharacter: !state.showCharacter })),
   toggleSettings: () => set((state) => ({ showSettings: !state.showSettings })),
   toggleMinimap: () => set((state) => ({ showMinimap: !state.showMinimap })),
+  toggleBags: () => set((state) => ({ showBags: !state.showBags })),
+  toggleTradeskills: () => set((state) => ({ showTradeskills: !state.showTradeskills })),
 
   // Chat functions
   addChatMessage: (message) => set((state) => ({

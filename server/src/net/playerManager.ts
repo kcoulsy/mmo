@@ -17,6 +17,7 @@ import {
   ChatMessage,
 } from "@shared/messages";
 import { WebSocketServer, ConnectedClient } from "./websocketServer";
+import { PlayerModel } from "../db/models/PlayerModel";
 
 export class PlayerManager {
   private playerEntities: Map<string, EntityId> = new Map(); // playerId -> entityId
@@ -54,31 +55,109 @@ export class PlayerManager {
   }
 
   // Create a player entity when a client connects
-  createPlayer(
+  async createPlayer(
     client: ConnectedClient,
     playerData: { name: string; playerId?: string }
-  ): EntityId {
-    // Always generate a server-assigned player ID (ignore client-provided ID)
-    const playerId = `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+  ): Promise<EntityId> {
+    // Use player name as account ID for now (in a real game, you'd have proper account management)
+    const accountId = playerData.name;
+
+    // Try to find existing player data
+    let existingPlayer = null;
+    try {
+      const players = await PlayerModel.findByAccountId(accountId);
+      existingPlayer = players.length > 0 ? players[0] : null;
+    } catch (error) {
+      console.error("Error loading player data:", error);
+    }
+
+    // Generate player ID or use existing one
+    const playerId =
+      existingPlayer?.id ||
+      `player_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     client.playerId = playerId;
     this.server.setPlayerForClient(client.id, playerId);
 
     // Create ECS entity
     const entityId = this.world.createEntity();
 
-    // Add components - fixed spawn position for now
-    const spawnX = 400;
-    const spawnY = 300;
-    console.log(
-      `[SERVER] Spawning player ${playerId} at fixed position (${spawnX}, ${spawnY})`
-    );
+    let playerStats: Stats;
+    let playerPosition: Position;
 
-    const position: Position = {
-      type: "position",
-      x: spawnX,
-      y: spawnY,
-      z: 0,
-    };
+    if (existingPlayer) {
+      // Load existing player data
+      console.log(
+        `[SERVER] Loading existing player ${playerId} (${playerData.name}) from database`
+      );
+
+      playerPosition = {
+        type: "position",
+        x: existingPlayer.position.x,
+        y: existingPlayer.position.y,
+        z: existingPlayer.position.z || 0,
+      };
+
+      playerStats = {
+        type: "stats",
+        hp: existingPlayer.stats.hp,
+        maxHp: existingPlayer.stats.maxHp,
+        mp: existingPlayer.stats.mp,
+        maxMp: existingPlayer.stats.maxMp,
+        attack: existingPlayer.stats.strength, // Map strength to attack for now
+        defense: existingPlayer.stats.vitality, // Map vitality to defense for now
+        moveSpeed: 100,
+      };
+    } else {
+      // Create new player with default spawn position
+      const spawnX = 400;
+      const spawnY = 300;
+      console.log(
+        `[SERVER] Creating new player ${playerId} (${playerData.name}) at spawn position (${spawnX}, ${spawnY})`
+      );
+
+      playerPosition = {
+        type: "position",
+        x: spawnX,
+        y: spawnY,
+        z: 0,
+      };
+
+      playerStats = {
+        type: "stats",
+        hp: 100,
+        maxHp: 100,
+        mp: 50,
+        maxMp: 50,
+        attack: 10,
+        defense: 5,
+        moveSpeed: 100,
+      };
+
+      // Save new player to database
+      try {
+        await PlayerModel.create({
+          accountId,
+          charName: playerData.name,
+          level: 1,
+          experience: 0,
+          position: { x: spawnX, y: spawnY, z: 0 },
+          stats: {
+            hp: 100,
+            maxHp: 100,
+            mp: 50,
+            maxMp: 50,
+            strength: 10,
+            dexterity: 10,
+            intelligence: 10,
+            vitality: 10,
+          },
+          gold: 0,
+        });
+        console.log(`[SERVER] Saved new player ${playerId} to database`);
+      } catch (error) {
+        console.error("Error saving new player to database:", error);
+      }
+    }
 
     const player: Player = {
       type: "player",
@@ -100,34 +179,29 @@ export class PlayerManager {
       frame: 0,
     };
 
-    const stats: Stats = {
-      type: "stats",
-      hp: 100,
-      maxHp: 100,
-      mp: 50,
-      maxMp: 50,
-      attack: 10,
-      defense: 5,
-      moveSpeed: 100,
-    };
-
-    this.world.addComponent(entityId, position);
+    this.world.addComponent(entityId, playerPosition);
     this.world.addComponent(entityId, player);
     this.world.addComponent(entityId, velocity);
     this.world.addComponent(entityId, renderable);
-    this.world.addComponent(entityId, stats);
+    this.world.addComponent(entityId, playerStats);
 
-    // Initialize inventory
-    this.itemSystem.initializePlayerInventory(entityId, playerId);
+    // Initialize inventory for new players only
+    if (!existingPlayer) {
+      this.itemSystem.initializePlayerInventory(entityId, playerId);
 
-    // Give starting items
-    this.itemSystem.addItemsToInventory(playerId, [
-      { itemId: "health_potion", quantity: 5 },
-      { itemId: "mana_potion", quantity: 3 },
-      { itemId: "wooden_sword", quantity: 1 },
-      { itemId: "leather_armor", quantity: 1 },
-      { itemId: "copper_ore", quantity: 10 },
-    ]);
+      // Give starting items
+      this.itemSystem.addItemsToInventory(playerId, [
+        { itemId: "health_potion", quantity: 5 },
+        { itemId: "mana_potion", quantity: 3 },
+        { itemId: "wooden_sword", quantity: 1 },
+        { itemId: "leather_armor", quantity: 1 },
+        { itemId: "copper_ore", quantity: 10 },
+      ]);
+    } else {
+      // For existing players, load their inventory (this would need to be implemented)
+      this.itemSystem.initializePlayerInventory(entityId, playerId);
+      // TODO: Load saved inventory from database
+    }
 
     // Track the mapping
     this.playerEntities.set(playerId, entityId);
@@ -140,11 +214,11 @@ export class PlayerManager {
       playerId,
       playerData: {
         name: playerData.name,
-        position,
+        position: playerPosition,
         stats: {
-          hp: stats.hp,
-          maxHp: stats.maxHp,
-          level: 1, // TODO: Get from player data
+          hp: playerStats.hp,
+          maxHp: playerStats.maxHp,
+          level: existingPlayer?.level || 1,
         },
       },
     };
@@ -156,9 +230,42 @@ export class PlayerManager {
   }
 
   // Remove a player when they disconnect
-  removePlayer(playerId: string) {
+  async removePlayer(playerId: string) {
     const entityId = this.playerEntities.get(playerId);
     if (entityId) {
+      // Save player position before removing them
+      try {
+        const position = this.world.getComponent(entityId, "position");
+        const stats = this.world.getComponent(entityId, "stats");
+
+        if (position) {
+          await PlayerModel.update(playerId, {
+            position: {
+              x: position.x,
+              y: position.y,
+              z: position.z,
+            },
+            stats: stats
+              ? {
+                  hp: stats.hp,
+                  maxHp: stats.maxHp,
+                  mp: stats.mp,
+                  maxMp: stats.maxMp,
+                  strength: stats.attack, // Reverse mapping
+                  dexterity: 10, // Default for now
+                  intelligence: 10, // Default for now
+                  vitality: stats.defense, // Reverse mapping
+                }
+              : undefined,
+          });
+          console.log(
+            `[SERVER] Saved position for player ${playerId}: (${position.x}, ${position.y}, ${position.z})`
+          );
+        }
+      } catch (error) {
+        console.error(`Error saving player position for ${playerId}:`, error);
+      }
+
       this.world.destroyEntity(entityId);
       this.playerEntities.delete(playerId);
       this.entityPlayers.delete(entityId);

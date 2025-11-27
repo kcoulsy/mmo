@@ -49,7 +49,7 @@ async function main() {
   // Handle player join requests
   wsServer.onMessage(
     "PLAYER_JOIN_REQUEST",
-    (client, message: PlayerJoinRequestMessage) => {
+    async (client, message: PlayerJoinRequestMessage) => {
       // Only allow one player per client connection
       if (client.playerId) {
         console.log(
@@ -65,26 +65,32 @@ async function main() {
       const playerName =
         message.playerName || `Adventurer_${Date.now().toString().slice(-4)}`;
       console.log(`Using player name: "${playerName}"`);
-      playerManager.createPlayer(client, {
-        name: playerName,
-        playerId: message.playerId,
-      });
-      console.log(`Player ${playerName} joined from client ${client.id}`);
 
-      // Send current world state to the new player so they see existing players and entities
-      const currentPlayers = playerManager.getAllPlayers();
-      const currentEntities = world.getEntitiesForSync();
-      console.log(
-        `[SERVER] Sending WORLD_STATE to client ${client.id} with ${currentPlayers.length} players:`,
-        currentPlayers.map((p) => `${p.id}(${p.name})`)
-      );
-      const worldStateMessage: WorldStateMessage = {
-        type: "WORLD_STATE",
-        timestamp: Date.now(),
-        players: currentPlayers,
-        entities: currentEntities,
-      };
-      wsServer.sendToClient(client, worldStateMessage);
+      try {
+        await playerManager.createPlayer(client, {
+          name: playerName,
+          playerId: message.playerId,
+        });
+        console.log(`Player ${playerName} joined from client ${client.id}`);
+
+        // Send current world state to the new player so they see existing players and entities
+        const currentPlayers = playerManager.getAllPlayers();
+        const currentEntities = world.getEntitiesForSync();
+        console.log(
+          `[SERVER] Sending WORLD_STATE to client ${client.id} with ${currentPlayers.length} players:`,
+          currentPlayers.map((p) => `${p.id}(${p.name})`)
+        );
+        const worldStateMessage: WorldStateMessage = {
+          type: "WORLD_STATE",
+          timestamp: Date.now(),
+          players: currentPlayers,
+          entities: currentEntities,
+        };
+        wsServer.sendToClient(client, worldStateMessage);
+      } catch (error) {
+        console.error(`Error creating player ${playerName}:`, error);
+        // Could send an error message to the client here
+      }
     }
   );
 
@@ -209,12 +215,12 @@ async function main() {
   const TICK_RATE = 20; // 20 ticks per second
   const TICK_INTERVAL = 1000 / TICK_RATE;
 
-  setInterval(() => {
+  setInterval(async () => {
     const deltaTime = 1 / TICK_RATE;
     world.update(deltaTime);
 
     // Clean up inactive connections periodically
-    wsServer.cleanupInactiveConnections();
+    await wsServer.cleanupInactiveConnections();
   }, TICK_INTERVAL);
 
   console.log("Ironwild server running!");

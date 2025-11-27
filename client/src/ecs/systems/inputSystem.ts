@@ -7,6 +7,7 @@ import {
   Position,
   Renderable,
 } from "@shared/ecs";
+import { useKeybindStore, useUIStore } from "../../stores";
 
 export class InputSystem implements System {
   private keys: Set<string> = new Set();
@@ -14,38 +15,68 @@ export class InputSystem implements System {
   private mouseButtons: Set<number> = new Set();
   private networkSystem?: any; // NetworkSystem - using any to avoid circular imports
   private renderSystem?: any; // RenderSystem - for camera position
+  private onToggleGameMenu?: () => void;
+  private canvas: HTMLCanvasElement;
+  private keydownHandler: (e: KeyboardEvent) => void;
+  private keyupHandler: (e: KeyboardEvent) => void;
+  private mousedownHandler: (e: MouseEvent) => void;
+  private mouseupHandler: (e: MouseEvent) => void;
+  private clickHandler: (e: MouseEvent) => void;
+  private contextmenuHandler: (e: MouseEvent) => void;
+  private mousemoveHandler: (e: MouseEvent) => void;
 
   constructor(canvas: HTMLCanvasElement) {
     console.log("[INPUT] InputSystem created");
-    // Keyboard event listeners
-    window.addEventListener("keydown", (e) => {
+    this.canvas = canvas;
+
+    // Create event handlers
+    this.keydownHandler = (e) => {
       console.log("[INPUT] Key down:", e.code);
       this.keys.add(e.code);
-    });
-    window.addEventListener("keyup", (e) => {
+
+      // Handle keybind actions (prevent default if handled)
+      if (this.handleKeybindAction(e.code)) {
+        e.preventDefault();
+        return;
+      }
+    };
+
+    this.keyupHandler = (e) => {
       console.log("[INPUT] Key up:", e.code);
       this.keys.delete(e.code);
-    });
+    };
 
-    // Mouse event listeners
-    canvas.addEventListener("mousedown", (e) => {
+    this.mousedownHandler = (e) => {
       this.mouseButtons.add(e.button);
       this.updateMousePosition(e, canvas);
-    });
-    canvas.addEventListener("mouseup", (e) => {
+    };
+
+    this.mouseupHandler = (e) => {
       this.mouseButtons.delete(e.button);
       this.updateMousePosition(e, canvas);
-    });
-    canvas.addEventListener("click", (e) => {
+    };
+
+    this.clickHandler = (e) => {
       this.handleClick(e, canvas);
-    });
-    canvas.addEventListener("contextmenu", (e) => {
+    };
+
+    this.contextmenuHandler = (e) => {
       e.preventDefault(); // Prevent browser context menu
       this.handleRightClick(e, canvas);
-    });
-    canvas.addEventListener("mousemove", (e) => {
+    };
+
+    this.mousemoveHandler = (e) => {
       this.updateMousePosition(e, canvas);
-    });
+    };
+
+    // Attach event listeners
+    window.addEventListener("keydown", this.keydownHandler);
+    window.addEventListener("keyup", this.keyupHandler);
+    canvas.addEventListener("mousedown", this.mousedownHandler);
+    canvas.addEventListener("mouseup", this.mouseupHandler);
+    canvas.addEventListener("click", this.clickHandler);
+    canvas.addEventListener("contextmenu", this.contextmenuHandler);
+    canvas.addEventListener("mousemove", this.mousemoveHandler);
   }
 
   // Set the network system to send input updates to
@@ -56,6 +87,11 @@ export class InputSystem implements System {
   // Set the render system for camera position access
   setRenderSystem(renderSystem: any) {
     this.renderSystem = renderSystem;
+  }
+
+  // Set callback for game menu toggle
+  setToggleGameMenuCallback(callback: () => void) {
+    this.onToggleGameMenu = callback;
   }
 
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
@@ -320,5 +356,72 @@ export class InputSystem implements System {
 
     // Clear pending right-click
     this.pendingRightClick = undefined;
+  }
+
+  private handleKeybindAction(keyCode: string): boolean {
+    const keybindStore = useKeybindStore.getState();
+    const uiStore = useUIStore.getState();
+    const actionId = keybindStore.getActionForKey(keyCode);
+
+    console.log(
+      "[INPUT] Keybind check for",
+      keyCode,
+      "- actionId:",
+      actionId,
+      "- mappings:",
+      keybindStore.mappings
+    );
+
+    if (!actionId) return false;
+
+    console.log("[INPUT] Keybind action triggered:", actionId);
+
+    switch (actionId) {
+      case "toggle_game_menu":
+        console.log(
+          "[INPUT] Toggling game menu - callback exists:",
+          !!this.onToggleGameMenu
+        );
+        if (this.onToggleGameMenu) {
+          console.log("[INPUT] Calling onToggleGameMenu callback");
+          this.onToggleGameMenu();
+        } else {
+          console.log("[INPUT] No callback, using fallback to store");
+          // Fallback to store
+          keybindStore.toggleGameMenu();
+        }
+        return true;
+
+      case "toggle_bag":
+        uiStore.toggleBags();
+        return true;
+
+      case "toggle_inventory":
+        uiStore.toggleInventory();
+        return true;
+
+      case "toggle_skills":
+        uiStore.toggleTradeskills();
+        return true;
+
+      case "toggle_character":
+        uiStore.toggleCharacter();
+        return true;
+
+      default:
+        return false;
+    }
+  }
+
+  // Clean up event listeners
+  cleanup(): void {
+    console.log("[INPUT] Cleaning up InputSystem event listeners");
+    window.removeEventListener("keydown", this.keydownHandler);
+    window.removeEventListener("keyup", this.keyupHandler);
+    this.canvas.removeEventListener("mousedown", this.mousedownHandler);
+    this.canvas.removeEventListener("mouseup", this.mouseupHandler);
+    this.canvas.removeEventListener("click", this.clickHandler);
+    this.canvas.removeEventListener("contextmenu", this.contextmenuHandler);
+    this.canvas.removeEventListener("mousemove", this.mousemoveHandler);
   }
 }

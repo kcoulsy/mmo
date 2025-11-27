@@ -59,7 +59,7 @@ export class WebSocketServer {
 
     ws.on("message", (data) => {
       try {
-        const message = unpack(data) as Message;
+        const message = unpack(data as Buffer) as Message;
         this.handleMessage(client, message);
         client.lastActivity = Date.now();
       } catch (error) {
@@ -67,25 +67,27 @@ export class WebSocketServer {
       }
     });
 
-    ws.on("close", () => {
+    ws.on("close", async () => {
       console.log(`Client ${clientId} disconnected`);
       this.clients.delete(clientId);
 
       // Remove player from game world if they had one
       if (client.playerId && this.playerManager) {
-        this.playerManager.removePlayer(client.playerId);
+        await this.playerManager.removePlayer(client.playerId);
         console.log(`Removed player ${client.playerId} due to disconnection`);
       }
     });
 
-    ws.on("error", (error) => {
+    ws.on("error", async (error) => {
       console.error(`Client ${clientId} error:`, error);
       this.clients.delete(clientId);
 
       // Remove player from game world if they had one
       if (client.playerId && this.playerManager) {
-        this.playerManager.removePlayer(client.playerId);
-        console.log(`Removed player ${client.playerId} due to connection error`);
+        await this.playerManager.removePlayer(client.playerId);
+        console.log(
+          `Removed player ${client.playerId} due to connection error`
+        );
       }
     });
 
@@ -203,7 +205,7 @@ export class WebSocketServer {
   }
 
   // Clean up inactive connections
-  cleanupInactiveConnections(maxAge: number = 30000) {
+  async cleanupInactiveConnections(maxAge: number = 30000) {
     // 30 seconds default
     const now = Date.now();
     const toRemove: string[] = [];
@@ -215,20 +217,22 @@ export class WebSocketServer {
       }
     }
 
-    toRemove.forEach((clientId) => {
+    for (const clientId of toRemove) {
       const client = this.clients.get(clientId);
       if (client) {
         this.clients.delete(clientId);
 
         // Remove player from game world if they had one
         if (client.playerId && this.playerManager) {
-          this.playerManager.removePlayer(client.playerId);
-          console.log(`Removed inactive player ${client.playerId} (${clientId})`);
+          await this.playerManager.removePlayer(client.playerId);
+          console.log(
+            `Removed inactive player ${client.playerId} (${clientId})`
+          );
         } else {
           console.log(`Cleaned up inactive client: ${clientId}`);
         }
       }
-    });
+    }
   }
 
   // Graceful shutdown

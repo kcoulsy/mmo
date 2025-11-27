@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { ClientWorld } from './ecs/world';
 import { RenderSystem } from './ecs/systems/renderSystem';
@@ -10,7 +10,7 @@ import { GameClient } from './net/client';
 import { NetworkSystem } from './net/networkSystem';
 import { InterpolationSystem } from './net/interpolation';
 import { PlayerJoinRequestMessage } from '../../shared/messages/index';
-import { useGameStore, usePlayerStore, useChatStore, useChatBubbleStore } from './stores';
+import { useGameStore, usePlayerStore, useChatStore, useChatBubbleStore, useUIStore, useKeybindStore } from './stores';
 
 import { UIInterface } from "./ui/ui-interface"
 import { LoginScreen } from "./ui/login-screen"
@@ -21,6 +21,11 @@ export function App() {
   const networkSystemRef = useRef<any>(null);
   const gameClientRef = useRef<GameClient | null>(null);
   const worldRef = useRef<any>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const systemsInitializedRef = useRef<boolean>(false);
+  const inputSystemRef = useRef<any>(null);
+
+  const [showGameMenu, setShowGameMenu] = useState(false);
 
   const {
     setConnected,
@@ -69,10 +74,19 @@ export function App() {
     const renderSystem = new RenderSystem(canvas);
     const movementSystem = new MovementSystem();
     const inputSystem = new InputSystem(canvas);
+    inputSystemRef.current = inputSystem;
 
     // Connect input system to network system
     inputSystem.setNetworkSystem(networkSystem);
     inputSystem.setRenderSystem(renderSystem);
+
+    // Connect input system to UI toggle functions
+    console.log('[APP] Setting toggleGameMenu callback on InputSystem');
+    inputSystem.setToggleGameMenuCallback(() => {
+      console.log('[APP] InputSystem toggleGameMenu callback called');
+      setShowGameMenu(prev => !prev);
+    });
+    console.log('[APP] toggleGameMenu callback set successfully');
 
     // Set up chat message handling
     console.log('[APP] Setting up chat message callback');
@@ -164,18 +178,8 @@ export function App() {
     let fpsTime = 0;
 
     function gameLoop(currentTime: number) {
-      // Debug: log every frame for first few frames
-      if (frameCount < 5) {
-        console.log('[GAME] Game loop frame', frameCount, 'currentTime:', currentTime);
-      }
-
       const deltaTime = Math.min((currentTime - lastTime) / 1000, 1 / 30); // Cap delta time to prevent large jumps
       lastTime = currentTime;
-
-      // Debug: log every 60 frames (about once per second at 60fps)
-      if (frameCount % 60 === 0) {
-        console.log('[GAME] Game loop running, deltaTime:', deltaTime, 'fpsTime:', fpsTime);
-      }
 
       // Update FPS counter
       frameCount++;
@@ -190,12 +194,12 @@ export function App() {
       cleanupExpiredBubbles();
 
       world.update(deltaTime);
-      requestAnimationFrame(gameLoop);
+      animationFrameRef.current = requestAnimationFrame(gameLoop);
     }
 
     // Start game loop
     console.log('[APP] Starting game loop');
-    requestAnimationFrame(gameLoop);
+    animationFrameRef.current = requestAnimationFrame(gameLoop);
 
     console.log('Ironwild client started!');
   };
@@ -297,48 +301,56 @@ export function App() {
   };
 
   const handleReconnect = async () => {
-    setConnectionStatus('connecting');
+    // Treat reconnect like a fresh login but with stored username
+    const storedName = useGameStore.getState().playerName;
+    if (storedName) {
+      await handleLogin(storedName);
+    } else {
+      console.error('No stored player name for reconnect');
+      setConnectionStatus('error');
+    }
+  };
 
-    try {
-      // Reinitialize ECS world and network system for reconnect
-      const world = new ClientWorld();
-      worldRef.current = world;
-      const gameClient = new GameClient('ws://localhost:8080');
-      gameClientRef.current = gameClient;
+  const handleDisconnect = () => {
+    console.log('[APP] Disconnecting from game');
 
-      const interpolationSystem = new InterpolationSystem();
-      const networkSystem = new NetworkSystem(gameClient, world, interpolationSystem);
-      networkSystemRef.current = networkSystem;
+    // Stop game loop
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
 
-      // Create temporary local player entity (will be updated with server data)
-      const tempPlayerEntityId = world.createEntity();
-      const tempPlayerId = `temp_local_${Date.now()}`;
+    // Clean up input system
+    if (inputSystemRef.current) {
+      inputSystemRef.current.cleanup();
+      inputSystemRef.current = null;
+    }
 
-      world.addComponent(tempPlayerEntityId, {
-        type: 'position',
-        x: 400, // Match server spawn position
-        y: 300,
-        z: 0,
-      });
-      world.addComponent(tempPlayerEntityId, {
-        type: 'velocity',
-        vx: 0,
-        vy: 0,
-      });
-      world.addComponent(tempPlayerEntityId, {
-        type: 'renderable',
-        spriteId: 'player',
-        layer: 1,
-        frame: 0,
-      });
-      world.addComponent(tempPlayerEntityId, {
-        type: 'player',
-        id: tempPlayerId,
-        name: useGameStore.getState().playerName, // Use stored name
-        isLocal: true,
-      });
-      world.addComponent(tempPlayerEntityId, {
-        type: 'stats',
+    // Clean up network system
+    if (networkSystemRef.current) {
+      networkSystemRef.current.cleanup();
+    }
+
+    // Disconnect from server
+    if (gameClientRef.current) {
+      gameClientRef.current.disconnect();
+    }
+
+    // Reset game state
+    setLoggedIn(false);
+    setConnected(false);
+    setConnectionStatus('disconnected');
+    setIsReconnecting(false);
+    setShowGameMenu(false);
+
+    // Reset game initialization flag so we can reinitialize on reconnect
+    gameInitializedRef.current = false;
+
+    // Clear all stores to prevent stale data on reconnect
+    usePlayerStore.getState().setPlayer({
+      id: "",
+      name: "Player",
+      stats: {
         hp: 100,
         maxHp: 100,
         mp: 50,
@@ -346,48 +358,62 @@ export function App() {
         attack: 10,
         defense: 5,
         moveSpeed: 100,
-      });
+        level: 1,
+        experience: 0,
+        experienceToNext: 100,
+      },
+      position: { x: 400, y: 300, z: 0 },
+      isConnected: false,
+      isLocal: true,
+      target: null,
+      tradeskills: [
+        {
+          name: "Mining",
+          level: 1,
+          experience: 0,
+          experienceToNext: 100,
+          icon: "⛏️",
+        },
+        {
+          name: "Woodcutting",
+          level: 1,
+          experience: 0,
+          experienceToNext: 100,
+          icon: "🪓",
+        },
+        {
+          name: "Herbalism",
+          level: 1,
+          experience: 0,
+          experienceToNext: 100,
+          icon: "🌿",
+        },
+      ],
+      inventory: {
+        slots: new Array(32).fill(null),
+        maxSlots: 32,
+      },
+    });
 
-      // Tell network system about the temp entity
-      networkSystem.setTempLocalEntity(tempPlayerEntityId);
+    useChatStore.getState().clearMessages();
+    useChatBubbleStore.getState().cleanupExpiredBubbles(); // Clear all bubbles
 
-      // Set up callbacks
-      networkSystem.setPlayerJoinedCallback(() => {
-        console.log('[APP] Player successfully rejoined with initial data, showing game');
-        setLoggedIn(true);
-        setIsReconnecting(false);
-      });
+    // Reset UI state
+    useUIStore.setState({
+      showBags: false,
+      showCharacter: false,
+      showTradeskills: false,
+    });
 
-      // Set up disconnect handling
-      gameClient.setDisconnectCallback(() => {
-        console.log('[APP] Disconnected from server during reconnect');
-        setLoggedIn(false);
-        setIsReconnecting(true);
-        setConnectionStatus('disconnected');
-        setConnected(false);
-      });
+    // Reset keybind state to defaults
+    useKeybindStore.getState().resetToDefaults();
 
-      await gameClient.connect();
-      console.log('Reconnected to game server!');
-      setConnected(true);
-      setConnectionStatus('connected');
-
-      // Send join request to rejoin with existing player data
-      const joinMessage: PlayerJoinRequestMessage = {
-        type: 'PLAYER_JOIN_REQUEST',
-        timestamp: Date.now(),
-        playerName: useGameStore.getState().playerName,
-      };
-      gameClient.send(joinMessage);
-      console.log('Sent reconnect join request to server');
-
-      // Wait for PLAYER_JOIN response before showing game
-      // This will be handled by the network system's playerJoinedCallback
-
-    } catch (error) {
-      console.error('Failed to reconnect to server:', error);
-      setConnectionStatus('error');
-    }
+    // Clear game refs
+    worldRef.current = null;
+    networkSystemRef.current = null;
+    gameClientRef.current = null;
+    inputSystemRef.current = null;
+    systemsInitializedRef.current = false;
   };
 
   // Show login screen if not logged in, otherwise show game
@@ -407,7 +433,11 @@ export function App() {
       />
 
       {/* UI Overlay */}
-      <UIInterface onSendChatMessage={(message, mode) => networkSystemRef.current?.sendChatMessage(message, mode)} />
+      <UIInterface
+        onSendChatMessage={(message, mode) => networkSystemRef.current?.sendChatMessage(message, mode)}
+        onDisconnect={handleDisconnect}
+        showGameMenu={showGameMenu}
+      />
     </div>
   )
 }

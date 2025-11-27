@@ -19,12 +19,6 @@ export class RenderSystem implements System {
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
-    console.log(
-      "[RENDER] RenderSystem created, canvas size:",
-      canvas.width,
-      "x",
-      canvas.height
-    );
   }
 
   getCameraPosition(): { x: number; y: number } {
@@ -36,16 +30,6 @@ export class RenderSystem implements System {
     const now = Date.now();
     if (now - this.lastLogTime > 1000) {
       this.lastLogTime = now;
-      console.log(
-        "[RENDER] Render system update - entities count:",
-        entities.size
-      );
-      const renderableCount = Array.from(entities.values()).filter(
-        (entity) =>
-          entity.components.has("renderable") &&
-          entity.components.has("position")
-      ).length;
-      console.log("[RENDER] Renderable entities:", renderableCount);
     }
 
     // Update camera position based on player position
@@ -67,17 +51,6 @@ export class RenderSystem implements System {
         return renderA.layer - renderB.layer;
       });
 
-    console.log(
-      "[RENDER] Found renderable entities:",
-      renderableEntities.length
-    );
-    if (renderableEntities.length > 0) {
-      console.log(
-        "[RENDER] First entity components:",
-        Array.from(renderableEntities[0].components.keys())
-      );
-    }
-
     // Render each entity
     for (const entity of renderableEntities) {
       const position = entity.components.get("position") as Position;
@@ -96,7 +69,6 @@ export class RenderSystem implements System {
     const allPlayers = Array.from(entities.values()).filter((entity) =>
       entity.components.has("player")
     );
-    console.log(`[RENDER] Found ${allPlayers.length} player entities in world`);
 
     const playerEntity = Array.from(entities.values()).find((entity) => {
       const player = entity.components.get("player") as Player;
@@ -113,10 +85,6 @@ export class RenderSystem implements System {
       console.log("[RENDER] Local player has no position for camera");
       return;
     }
-
-    console.log(
-      `[RENDER] Camera following player at (${playerPosition.x}, ${playerPosition.y}), current camera: (${this.cameraX}, ${this.cameraY})`
-    );
 
     // Define screen boundaries - player should stay within these bounds
     const leftBoundary = 200;
@@ -151,7 +119,6 @@ export class RenderSystem implements System {
     // Move camera towards target position instantly
     this.cameraX = targetCameraX;
     this.cameraY = targetCameraY;
-    console.log(`[RENDER] Camera moved to (${this.cameraX}, ${this.cameraY})`);
   }
 
   private drawIsometricGrid(): void {
@@ -216,12 +183,6 @@ export class RenderSystem implements System {
     player?: Player,
     gameObject?: GameObject
   ): void {
-    // Debug logging - only for players (reduced frequency)
-    if (player && Math.random() < 0.001) {
-      console.log(
-        `[RENDER] Rendering player ${player.name} at (${position.x}, ${position.y})`
-      );
-    }
     this.ctx.save();
 
     // Position is already in world coordinates, camera transformation is applied to entire context
