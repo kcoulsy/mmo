@@ -228,7 +228,7 @@ export function App() {
   }, [setConnected, setConnectionStatus, setPlayer, updateFPS]);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-green-600">
+    <div className="relative h-screen w-screen overflow-hidden">
       {/* Game Canvas */}
       <canvas
         ref={canvasRef}
