@@ -20,7 +20,9 @@ import {
   SetTargetMessage,
   ClearTargetMessage,
   TargetInfoMessage,
+  InventoryUpdateMessage,
 } from "@shared/messages";
+import { ITEM_TEMPLATES } from "@shared/items";
 import { GameClient } from "./client";
 
 export class NetworkSystem implements System {
@@ -41,6 +43,7 @@ export class NetworkSystem implements System {
       position: { x: number; y: number; z: number };
       isConnected: boolean;
       isLocal: boolean;
+      inventory?: any;
     }>
   ) => void;
   private onTargetUpdate?: (target: {
@@ -70,6 +73,7 @@ export class NetworkSystem implements System {
     playerId: string,
     position: { x: number; y: number }
   ) => void;
+  private onPlayerJoined?: () => void;
 
   constructor(
     private client: GameClient,
@@ -77,9 +81,16 @@ export class NetworkSystem implements System {
     private interpolationSystem?: any // InterpolationSystem - optional for smooth movement
   ) {
     this.setupMessageHandlers();
+    this.setupDisconnectHandling();
   }
 
   update(entities: Map<EntityId, any>, _deltaTime: number): void {
+    // Debug logging
+    if (Math.random() < 0.01) {
+      // Log ~1% of frames
+      console.log("[NETWORK] NetworkSystem update - entities:", entities.size);
+    }
+
     const currentTime = Date.now();
 
     // Check if input has changed
@@ -306,6 +317,10 @@ export class NetworkSystem implements System {
     this.onRemotePlayerPositionUpdate = callback;
   }
 
+  setPlayerJoinedCallback(callback: () => void) {
+    this.onPlayerJoined = callback;
+  }
+
   getLocalPlayerId(): string | undefined {
     return this.localPlayerId;
   }
@@ -351,6 +366,14 @@ export class NetworkSystem implements System {
       "TARGET_INFO" as any,
       (message: TargetInfoMessage) => {
         this.handleTargetInfo(message);
+      }
+    );
+
+    // Handle inventory updates
+    this.client.onMessage(
+      "INVENTORY_UPDATE" as any,
+      (message: InventoryUpdateMessage) => {
+        this.handleInventoryUpdate(message);
       }
     );
   }
@@ -431,6 +454,12 @@ export class NetworkSystem implements System {
       }
 
       this.setServerPlayerId(playerId);
+
+      // Notify that player has successfully joined with initial data
+      if (this.onPlayerJoined) {
+        this.onPlayerJoined();
+      }
+
       return;
     }
 
@@ -612,11 +641,25 @@ export class NetworkSystem implements System {
   }
 
   private handleWorldState(message: WorldStateMessage) {
+    console.log(
+      "[NETWORK] Received WORLD_STATE with",
+      message.players.length,
+      "players and",
+      message.entities?.length || 0,
+      "entities"
+    );
+    console.log(
+      "[NETWORK] Players in WORLD_STATE:",
+      message.players.map((p) => `${p.id}(${p.name})`)
+    );
+    console.log("[NETWORK] Local player ID:", this.localPlayerId);
+
     // Create a simple hash of the world state to detect changes
     const stateHash = this.createWorldStateHash(message.players);
 
     // Only process if the world state actually changed
     if (stateHash === this.lastWorldStateHash) {
+      console.log("[NETWORK] World state unchanged, skipping");
       return; // Skip processing if nothing changed - no re-renders triggered
     }
 
@@ -708,7 +751,8 @@ export class NetworkSystem implements System {
       if (!entityId && entityData.id) {
         // Create new entity
         entityId = this.world.createEntity();
-        this.remoteEntities.set(entityData.id!, entityId);
+        const entityServerId = entityData.id;
+        this.remoteEntities.set(entityServerId, entityId);
 
         // Add all components from server
         for (const component of entityData.components) {
@@ -738,6 +782,7 @@ export class NetworkSystem implements System {
 
   private createRemotePlayerFromWorldState(playerData: {
     id: string;
+    name: string;
     position: { x: number; y: number; z?: number };
     velocity?: { vx: number; vy: number };
     stats: { hp: number; maxHp: number; level: number };
@@ -758,7 +803,7 @@ export class NetworkSystem implements System {
     const player: Player = {
       type: "player",
       id: playerData.id,
-      name: `Player ${playerData.id}`, // We don't have the name in world state, so use ID
+      name: playerData.name,
       isLocal: false,
     };
 
@@ -881,6 +926,63 @@ export class NetworkSystem implements System {
     }
   }
 
+  private handleInventoryUpdate(message: InventoryUpdateMessage) {
+    console.log(
+      `[NETWORK] Received INVENTORY_UPDATE for player ${message.playerId}`
+    );
+
+    // Convert server inventory format to client format
+    const clientInventory = {
+      slots: message.inventory.slots.map((slot) => {
+        if (!slot) return null;
+
+        // Get item template for additional data
+        const template = ITEM_TEMPLATES[slot.itemId];
+        if (!template) return null;
+
+        return {
+          itemId: slot.itemId,
+          name: template.name,
+          icon: template.icon || "❓",
+          quantity: slot.quantity,
+          rarity: template.rarity,
+          durability: slot.durability,
+          maxDurability: template.maxDurability,
+          description: template.description,
+        };
+      }),
+      maxSlots: message.inventory.maxSlots,
+    };
+
+    // Update player store
+    if (this.onPlayerUpdate) {
+      this.onPlayerUpdate({
+        inventory: clientInventory,
+      });
+    }
+  }
+
+  // Send a harvest request
+  harvestObject(gameObjectId: string) {
+    console.log(
+      `[CLIENT HARVEST] Attempting to harvest object: ${gameObjectId}`
+    );
+
+    if (!this.localPlayerId) {
+      console.log(`[CLIENT HARVEST] Cannot harvest - no local player ID`);
+      return;
+    }
+
+    const harvestMessage = {
+      type: "HARVEST_OBJECT" as const,
+      timestamp: Date.now(),
+      gameObjectId,
+    };
+
+    console.log(`[CLIENT HARVEST] Sending harvest message:`, harvestMessage);
+    this.client.send(harvestMessage);
+  }
+
   // Send a chat message
   sendChatMessage(
     message: string,
@@ -906,5 +1008,19 @@ export class NetworkSystem implements System {
 
     console.log(`[CLIENT CHAT] Sending to server:`, chatMessage);
     this.client.send(chatMessage);
+  }
+
+  private setupDisconnectHandling() {
+    // Import the game store here to avoid circular imports
+    import("../stores").then(({ useGameStore }) => {
+      this.client.setDisconnectCallback(() => {
+        console.log("[NETWORK] Disconnected from server");
+        const store = useGameStore.getState();
+        store.setLoggedIn(false);
+        store.setIsReconnecting(true);
+        store.setConnectionStatus("disconnected");
+        store.setConnected(false);
+      });
+    });
   }
 }

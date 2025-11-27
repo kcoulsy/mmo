@@ -19,6 +19,7 @@ export class GameClient {
   private pingInterval: NodeJS.Timeout | null = null;
   private lastPingTime = 0;
   private messageQueue: Message[] = [];
+  private onDisconnect?: () => void;
 
   constructor(private serverUrl: string = "ws://localhost:8080") {
     this.setupDefaultHandlers();
@@ -69,6 +70,11 @@ export class GameClient {
         console.log(`Disconnected from server (code: ${event.code})`);
         this.connectionState.connected = false;
         this.stopPingInterval();
+
+        // Call disconnect callback
+        if (this.onDisconnect) {
+          this.onDisconnect();
+        }
 
         if (
           !event.wasClean &&
@@ -133,6 +139,11 @@ export class GameClient {
   // Set player ID for this connection
   setPlayerId(playerId: string) {
     this.connectionState.playerId = playerId;
+  }
+
+  // Set disconnect callback
+  setDisconnectCallback(callback: () => void) {
+    this.onDisconnect = callback;
   }
 
   private handleMessage(message: Message) {

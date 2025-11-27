@@ -14,13 +14,40 @@ export class RenderSystem implements System {
   private ctx: CanvasRenderingContext2D;
   private cameraX: number = 0;
   private cameraY: number = 0;
+  private lastLogTime: number = 0;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
     this.ctx = canvas.getContext("2d")!;
+    console.log(
+      "[RENDER] RenderSystem created, canvas size:",
+      canvas.width,
+      "x",
+      canvas.height
+    );
+  }
+
+  getCameraPosition(): { x: number; y: number } {
+    return { x: this.cameraX, y: this.cameraY };
   }
 
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
+    // Debug logging - only once per second
+    const now = Date.now();
+    if (now - this.lastLogTime > 1000) {
+      this.lastLogTime = now;
+      console.log(
+        "[RENDER] Render system update - entities count:",
+        entities.size
+      );
+      const renderableCount = Array.from(entities.values()).filter(
+        (entity) =>
+          entity.components.has("renderable") &&
+          entity.components.has("position")
+      ).length;
+      console.log("[RENDER] Renderable entities:", renderableCount);
+    }
+
     // Update camera position based on player position
     this.updateCamera(entities);
 
@@ -40,6 +67,17 @@ export class RenderSystem implements System {
         return renderA.layer - renderB.layer;
       });
 
+    console.log(
+      "[RENDER] Found renderable entities:",
+      renderableEntities.length
+    );
+    if (renderableEntities.length > 0) {
+      console.log(
+        "[RENDER] First entity components:",
+        Array.from(renderableEntities[0].components.keys())
+      );
+    }
+
     // Render each entity
     for (const entity of renderableEntities) {
       const position = entity.components.get("position") as Position;
@@ -55,15 +93,30 @@ export class RenderSystem implements System {
 
   private updateCamera(entities: Map<EntityId, Entity>): void {
     // Find the local player
+    const allPlayers = Array.from(entities.values()).filter((entity) =>
+      entity.components.has("player")
+    );
+    console.log(`[RENDER] Found ${allPlayers.length} player entities in world`);
+
     const playerEntity = Array.from(entities.values()).find((entity) => {
       const player = entity.components.get("player") as Player;
       return player && player.isLocal;
     });
 
-    if (!playerEntity) return;
+    if (!playerEntity) {
+      console.log("[RENDER] No local player found for camera");
+      return;
+    }
 
     const playerPosition = playerEntity.components.get("position") as Position;
-    if (!playerPosition) return;
+    if (!playerPosition) {
+      console.log("[RENDER] Local player has no position for camera");
+      return;
+    }
+
+    console.log(
+      `[RENDER] Camera following player at (${playerPosition.x}, ${playerPosition.y}), current camera: (${this.cameraX}, ${this.cameraY})`
+    );
 
     // Define screen boundaries - player should stay within these bounds
     const leftBoundary = 200;
@@ -98,6 +151,7 @@ export class RenderSystem implements System {
     // Move camera towards target position instantly
     this.cameraX = targetCameraX;
     this.cameraY = targetCameraY;
+    console.log(`[RENDER] Camera moved to (${this.cameraX}, ${this.cameraY})`);
   }
 
   private drawIsometricGrid(): void {
@@ -162,6 +216,12 @@ export class RenderSystem implements System {
     player?: Player,
     gameObject?: GameObject
   ): void {
+    // Debug logging - only for players (reduced frequency)
+    if (player && Math.random() < 0.001) {
+      console.log(
+        `[RENDER] Rendering player ${player.name} at (${position.x}, ${position.y})`
+      );
+    }
     this.ctx.save();
 
     // Position is already in world coordinates, camera transformation is applied to entire context
@@ -177,16 +237,37 @@ export class RenderSystem implements System {
     // TODO: Implement actual sprite rendering
     // For now, draw a placeholder rectangle
     if (gameObject) {
-      // GameObjects: green boxes
-      this.ctx.fillStyle = "#00ff00";
-      this.ctx.strokeStyle = "#008800";
+      // GameObjects: green boxes for harvestable, gray for non-harvestable
+      if (gameObject.harvestable) {
+        this.ctx.fillStyle = "#00ff00";
+        this.ctx.strokeStyle = "#008800";
+      } else {
+        this.ctx.fillStyle = "#666666";
+        this.ctx.strokeStyle = "#444444";
+      }
       this.ctx.lineWidth = 2;
       this.ctx.strokeRect(-20, -20, 40, 40);
       this.ctx.fillRect(-20, -20, 40, 40);
+
+      // Add a small indicator for harvestable objects
+      if (gameObject.harvestable) {
+        this.ctx.fillStyle = "#ffff00";
+        this.ctx.beginPath();
+        this.ctx.arc(15, -15, 3, 0, 2 * Math.PI);
+        this.ctx.fill();
+      }
     } else {
-      // Players: red boxes
-      this.ctx.fillStyle = "#ff0000";
+      // Players: colored boxes based on local/remote
+      if (player?.isLocal) {
+        this.ctx.fillStyle = "#3b82f6"; // Blue for local player
+        this.ctx.strokeStyle = "#1e40af";
+      } else {
+        this.ctx.fillStyle = "#ef4444"; // Red for remote players
+        this.ctx.strokeStyle = "#dc2626";
+      }
+      this.ctx.lineWidth = 2;
       this.ctx.fillRect(-16, -16, 32, 32);
+      this.ctx.strokeRect(-16, -16, 32, 32);
     }
 
     // Draw name above the entity

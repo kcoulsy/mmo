@@ -4,6 +4,7 @@ import { DatabaseService } from "./db";
 import { CombatSystem } from "./systems/CombatSystem";
 import { MovementSystem } from "./systems/MovementSystem";
 import { TradeskillSystem } from "./systems/TradeskillSystem";
+import { ItemSystem } from "./systems/ItemSystem";
 import { GameObjectSpawner } from "./world/spawners/GameObjectSpawner";
 import { WebSocketServer } from "./net/websocketServer";
 import { PlayerManager } from "./net/playerManager";
@@ -35,8 +36,12 @@ async function main() {
   // Initialize WebSocket server
   const wsServer = new WebSocketServer(8080);
 
+  // Initialize systems
+  const itemSystem = new ItemSystem(wsServer);
+  itemSystem.setWorld(world);
+
   // Initialize player manager
-  const playerManager = new PlayerManager(wsServer, world);
+  const playerManager = new PlayerManager(wsServer, world, itemSystem);
 
   // Connect player manager to WebSocket server for cleanup
   wsServer.setPlayerManager(playerManager);
@@ -54,19 +59,25 @@ async function main() {
       }
 
       // Create the player
+      console.log(
+        `Received PLAYER_JOIN_REQUEST with playerName: "${message.playerName}" from client ${client.id}`
+      );
       const playerName =
         message.playerName || `Adventurer_${Date.now().toString().slice(-4)}`;
+      console.log(`Using player name: "${playerName}"`);
       playerManager.createPlayer(client, {
         name: playerName,
         playerId: message.playerId,
       });
-      console.log(
-        `Player ${message.playerName} joined from client ${client.id}`
-      );
+      console.log(`Player ${playerName} joined from client ${client.id}`);
 
       // Send current world state to the new player so they see existing players and entities
       const currentPlayers = playerManager.getAllPlayers();
       const currentEntities = world.getEntitiesForSync();
+      console.log(
+        `[SERVER] Sending WORLD_STATE to client ${client.id} with ${currentPlayers.length} players:`,
+        currentPlayers.map((p) => `${p.id}(${p.name})`)
+      );
       const worldStateMessage: WorldStateMessage = {
         type: "WORLD_STATE",
         timestamp: Date.now(),
@@ -134,14 +145,14 @@ async function main() {
   // Handle object harvesting
   wsServer.onMessage(
     "HARVEST_OBJECT" as any,
-    (client, message: HarvestObjectMessage) => {
+    async (client, message: HarvestObjectMessage) => {
       if (!client.playerId) return;
 
       console.log(
         `Player ${client.playerId} attempting to harvest ${message.gameObjectId}`
       );
 
-      const result = tradeskillSystem.harvest(
+      const result = await tradeskillSystem.harvest(
         client.playerId,
         message.gameObjectId
       );
@@ -160,12 +171,13 @@ async function main() {
   );
 
   // Initialize and add systems
-  const tradeskillSystem = new TradeskillSystem();
+  const tradeskillSystem = new TradeskillSystem(itemSystem);
   tradeskillSystem.setWorld(world);
 
   world.addSystem(new CombatSystem());
   world.addSystem(new MovementSystem(playerManager));
   world.addSystem(tradeskillSystem);
+  world.addSystem(itemSystem);
   world.addSystem(new BroadcastSystem(wsServer, playerManager));
 
   // Create a test NPC entity

@@ -11,36 +11,59 @@ import { NetworkSystem } from './net/networkSystem';
 import { InterpolationSystem } from './net/interpolation';
 import { PlayerJoinRequestMessage } from '../../shared/messages/index';
 import { useGameStore, usePlayerStore, useChatStore, useChatBubbleStore } from './stores';
-import { TargetInfo } from './stores/playerStore';
 
 import { UIInterface } from "./ui/ui-interface"
+import { LoginScreen } from "./ui/login-screen"
 
 export function App() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const gameInitializedRef = useRef(false);
   const networkSystemRef = useRef<any>(null);
+  const gameClientRef = useRef<GameClient | null>(null);
+  const worldRef = useRef<any>(null);
 
-  const { setConnected, setConnectionStatus, updateFPS } = useGameStore();
+  const {
+    setConnected,
+    setConnectionStatus,
+    updateFPS,
+    isLoggedIn,
+    setLoggedIn,
+    setPlayerName,
+    setIsReconnecting
+  } = useGameStore();
   const { setPlayer, setTarget, clearTarget } = usePlayerStore();
   const { addMessage } = useChatStore();
   const { addBubble, cleanupExpiredBubbles, updateBubblePosition } = useChatBubbleStore();
 
+  // Initialize game world when logged in
   useEffect(() => {
-    if (gameInitializedRef.current || !canvasRef.current) return;
+    console.log('[APP] useEffect triggered - isLoggedIn:', isLoggedIn, 'gameInitialized:', gameInitializedRef.current, 'canvasRef:', !!canvasRef.current);
+    if (!isLoggedIn || gameInitializedRef.current || !canvasRef.current) return;
+    console.log('[APP] Calling initializeGame');
+    initializeGame();
+  }, [isLoggedIn]);
+
+  // Handle disconnects - this will be set up in the network system
+
+  const initializeGame = () => {
+    console.log('[APP] initializeGame called');
+    if (gameInitializedRef.current || !canvasRef.current || !worldRef.current) {
+      console.log('[APP] initializeGame early return - initialized:', gameInitializedRef.current, 'canvas:', !!canvasRef.current, 'world:', !!worldRef.current);
+      return;
+    }
     gameInitializedRef.current = true;
+    console.log('[APP] initializeGame proceeding');
 
     const canvas = canvasRef.current;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    console.log('[APP] Canvas dimensions set to:', canvas.width, 'x', canvas.height);
 
-    // Initialize ECS world
-    const world = new ClientWorld();
-
-    // Initialize network client
-    const gameClient = new GameClient('ws://localhost:8080');
-    const interpolationSystem = new InterpolationSystem();
-    const networkSystem = new NetworkSystem(gameClient, world, interpolationSystem);
-    networkSystemRef.current = networkSystem;
+    // Reuse existing world and network system from login
+    const world = worldRef.current;
+    const networkSystem = networkSystemRef.current;
 
     // Add systems
     const renderSystem = new RenderSystem(canvas);
@@ -49,10 +72,11 @@ export function App() {
 
     // Connect input system to network system
     inputSystem.setNetworkSystem(networkSystem);
+    inputSystem.setRenderSystem(renderSystem);
 
     // Set up chat message handling
     console.log('[APP] Setting up chat message callback');
-    networkSystem.setChatMessageCallback((message) => {
+    networkSystem.setChatMessageCallback((message: any) => {
       console.log('[APP] Chat callback called:', message);
       addMessage(message);
 
@@ -60,7 +84,7 @@ export function App() {
       if (message.playerId !== networkSystem.getLocalPlayerId()) {
         // Find the player's position in the world
         const playerEntities = world.getEntitiesWithComponent('player');
-        const playerEntity = playerEntities.find(entityId => {
+        const playerEntity = playerEntities.find((entityId: any) => {
           const playerComponent = world.getComponent(entityId, 'player') as any;
           return playerComponent && playerComponent.id === message.playerId;
         });
@@ -91,65 +115,35 @@ export function App() {
       updateBubblePosition(playerId, position);
     });
 
+    // Create interpolation system for smooth movement
+    const interpolationSystem = new InterpolationSystem();
+
     world.addSystem(inputSystem);
     world.addSystem(movementSystem);
     world.addSystem(networkSystem);
     world.addSystem(interpolationSystem);
     world.addSystem(renderSystem);
 
-    // Create local player entity (will be updated with server-assigned ID later)
-    const localPlayerEntityId = world.createEntity();
-    const tempPlayerId = `temp_local_${Date.now()}`;
-
-    world.addComponent(localPlayerEntityId, {
-      type: 'position',
-      x: 400, // Match server spawn position
-      y: 300,
-      z: 0,
-    });
-    world.addComponent(localPlayerEntityId, {
-      type: 'velocity',
-      vx: 0,
-      vy: 0,
-    });
-    world.addComponent(localPlayerEntityId, {
-      type: 'renderable',
-      spriteId: 'player',
-      layer: 1,
-      frame: 0,
-    });
-    world.addComponent(localPlayerEntityId, {
-      type: 'player',
-      id: tempPlayerId,
-      name: 'Player',
-      isLocal: true,
-    });
-    world.addComponent(localPlayerEntityId, {
-      type: 'stats',
-      hp: 100,
-      maxHp: 100,
-      mp: 50,
-      maxMp: 50,
-      attack: 10,
-      defense: 5,
-      moveSpeed: 100,
-    });
-
-    // Tell network system about the temp entity
-    networkSystem.setTempLocalEntity(localPlayerEntityId);
-
     // Set callback to update player store position
-    networkSystem.setPlayerPositionUpdateCallback((position) => {
+    networkSystem.setPlayerPositionUpdateCallback((position: any) => {
       setPlayer({ position });
     });
 
     // Set callback to update player store with server data
-    networkSystem.setPlayerUpdateCallback((playerData) => {
+    networkSystem.setPlayerUpdateCallback((playerData: any) => {
+      console.log('[APP] Updating player store with:', playerData);
       setPlayer(playerData);
     });
 
+    // Set callback for when player successfully joins with initial data
+    networkSystem.setPlayerJoinedCallback(() => {
+      console.log('[APP] Player successfully joined with initial data, showing game');
+      setLoggedIn(true);
+      setIsReconnecting(false);
+    });
+
     // Set callback to update target information
-    networkSystem.setTargetUpdateCallback((targetData) => {
+    networkSystem.setTargetUpdateCallback((targetData: any) => {
       console.log(`[APP] Target update:`, targetData);
       if (targetData.info && targetData.info.name) {
         console.log(`[APP] Setting target to: ${targetData.info.name}`);
@@ -163,54 +157,6 @@ export function App() {
       }
     });
 
-    // Update player store with initial data (will be updated with server data later)
-    setPlayer({
-      id: tempPlayerId,
-      name: 'Connecting...',
-      stats: {
-        hp: 100,
-        maxHp: 100,
-        mp: 50,
-        maxMp: 50,
-        attack: 10,
-        defense: 5,
-        moveSpeed: 100,
-        level: 1,
-        experience: 0,
-        experienceToNext: 100,
-      },
-      position: { x: 400, y: 300, z: 0 },
-      isConnected: false,
-      isLocal: true,
-    });
-
-    // Connect to server with a small delay
-    setTimeout(() => {
-      setConnectionStatus('connecting');
-      gameClient
-        .connect()
-        .then(() => {
-          console.log('Connected to game server!');
-          setConnected(true);
-          setConnectionStatus('connected');
-          setPlayer({ isConnected: true });
-
-          // Send join request to create player on server
-          const joinMessage: PlayerJoinRequestMessage = {
-            type: 'PLAYER_JOIN_REQUEST',
-            timestamp: Date.now(),
-            // Let server generate the player name
-            // Don't send playerId - server will assign one
-          };
-          gameClient.send(joinMessage);
-          console.log('Sent join request to server');
-        })
-        .catch((error) => {
-          console.error('Failed to connect to server:', error);
-          setConnectionStatus('error');
-          // Continue running in offline mode
-        });
-    }, 100);
 
     // Game loop
     let lastTime = 0;
@@ -218,8 +164,18 @@ export function App() {
     let fpsTime = 0;
 
     function gameLoop(currentTime: number) {
+      // Debug: log every frame for first few frames
+      if (frameCount < 5) {
+        console.log('[GAME] Game loop frame', frameCount, 'currentTime:', currentTime);
+      }
+
       const deltaTime = Math.min((currentTime - lastTime) / 1000, 1 / 30); // Cap delta time to prevent large jumps
       lastTime = currentTime;
+
+      // Debug: log every 60 frames (about once per second at 60fps)
+      if (frameCount % 60 === 0) {
+        console.log('[GAME] Game loop running, deltaTime:', deltaTime, 'fpsTime:', fpsTime);
+      }
 
       // Update FPS counter
       frameCount++;
@@ -238,15 +194,206 @@ export function App() {
     }
 
     // Start game loop
+    console.log('[APP] Starting game loop');
     requestAnimationFrame(gameLoop);
 
     console.log('Ironwild client started!');
+  };
 
-    // Cleanup function
-    return () => {
-      gameClient.disconnect();
-    };
-  }, [setConnected, setConnectionStatus, setPlayer, updateFPS]);
+  const handleLogin = async (playerName: string) => {
+    setPlayerName(playerName);
+    setConnectionStatus('connecting');
+
+    try {
+      // Initialize ECS world and network system for login
+      const world = new ClientWorld();
+      worldRef.current = world;
+      const gameClient = new GameClient('ws://localhost:8080');
+      gameClientRef.current = gameClient;
+
+      const interpolationSystem = new InterpolationSystem();
+      const networkSystem = new NetworkSystem(gameClient, world, interpolationSystem);
+      networkSystemRef.current = networkSystem;
+
+      // Create temporary local player entity (will be updated with server data)
+      const tempPlayerEntityId = world.createEntity();
+      const tempPlayerId = `temp_local_${Date.now()}`;
+
+      world.addComponent(tempPlayerEntityId, {
+        type: 'position',
+        x: 400, // Match server spawn position
+        y: 300,
+        z: 0,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'velocity',
+        vx: 0,
+        vy: 0,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'renderable',
+        spriteId: 'player',
+        layer: 1,
+        frame: 0,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'player',
+        id: tempPlayerId,
+        name: playerName, // Use the entered name
+        isLocal: true,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'stats',
+        hp: 100,
+        maxHp: 100,
+        mp: 50,
+        maxMp: 50,
+        attack: 10,
+        defense: 5,
+        moveSpeed: 100,
+      });
+
+      // Tell network system about the temp entity
+      networkSystem.setTempLocalEntity(tempPlayerEntityId);
+
+      // Set up callbacks
+      networkSystem.setPlayerJoinedCallback(() => {
+        console.log('[APP] Player successfully joined with initial data, showing game');
+        console.log('[APP] Setting isLoggedIn to true');
+        setLoggedIn(true);
+        setIsReconnecting(false);
+      });
+
+      // Set up disconnect handling
+      gameClient.setDisconnectCallback(() => {
+        console.log('[APP] Disconnected from server during login');
+        setLoggedIn(false);
+        setIsReconnecting(true);
+        setConnectionStatus('disconnected');
+        setConnected(false);
+      });
+
+      await gameClient.connect();
+      console.log('Connected to game server!');
+      setConnected(true);
+      setConnectionStatus('connected');
+
+      // Send join request to create player on server
+      const joinMessage: PlayerJoinRequestMessage = {
+        type: 'PLAYER_JOIN_REQUEST',
+        timestamp: Date.now(),
+        playerName: playerName,
+      };
+      gameClient.send(joinMessage);
+      console.log('Sent join request to server with name:', playerName);
+
+      // Wait for PLAYER_JOIN response before showing game
+      // This will be handled by the network system's playerJoinedCallback
+
+    } catch (error) {
+      console.error('Failed to connect to server:', error);
+      setConnectionStatus('error');
+    }
+  };
+
+  const handleReconnect = async () => {
+    setConnectionStatus('connecting');
+
+    try {
+      // Reinitialize ECS world and network system for reconnect
+      const world = new ClientWorld();
+      worldRef.current = world;
+      const gameClient = new GameClient('ws://localhost:8080');
+      gameClientRef.current = gameClient;
+
+      const interpolationSystem = new InterpolationSystem();
+      const networkSystem = new NetworkSystem(gameClient, world, interpolationSystem);
+      networkSystemRef.current = networkSystem;
+
+      // Create temporary local player entity (will be updated with server data)
+      const tempPlayerEntityId = world.createEntity();
+      const tempPlayerId = `temp_local_${Date.now()}`;
+
+      world.addComponent(tempPlayerEntityId, {
+        type: 'position',
+        x: 400, // Match server spawn position
+        y: 300,
+        z: 0,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'velocity',
+        vx: 0,
+        vy: 0,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'renderable',
+        spriteId: 'player',
+        layer: 1,
+        frame: 0,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'player',
+        id: tempPlayerId,
+        name: useGameStore.getState().playerName, // Use stored name
+        isLocal: true,
+      });
+      world.addComponent(tempPlayerEntityId, {
+        type: 'stats',
+        hp: 100,
+        maxHp: 100,
+        mp: 50,
+        maxMp: 50,
+        attack: 10,
+        defense: 5,
+        moveSpeed: 100,
+      });
+
+      // Tell network system about the temp entity
+      networkSystem.setTempLocalEntity(tempPlayerEntityId);
+
+      // Set up callbacks
+      networkSystem.setPlayerJoinedCallback(() => {
+        console.log('[APP] Player successfully rejoined with initial data, showing game');
+        setLoggedIn(true);
+        setIsReconnecting(false);
+      });
+
+      // Set up disconnect handling
+      gameClient.setDisconnectCallback(() => {
+        console.log('[APP] Disconnected from server during reconnect');
+        setLoggedIn(false);
+        setIsReconnecting(true);
+        setConnectionStatus('disconnected');
+        setConnected(false);
+      });
+
+      await gameClient.connect();
+      console.log('Reconnected to game server!');
+      setConnected(true);
+      setConnectionStatus('connected');
+
+      // Send join request to rejoin with existing player data
+      const joinMessage: PlayerJoinRequestMessage = {
+        type: 'PLAYER_JOIN_REQUEST',
+        timestamp: Date.now(),
+        playerName: useGameStore.getState().playerName,
+      };
+      gameClient.send(joinMessage);
+      console.log('Sent reconnect join request to server');
+
+      // Wait for PLAYER_JOIN response before showing game
+      // This will be handled by the network system's playerJoinedCallback
+
+    } catch (error) {
+      console.error('Failed to reconnect to server:', error);
+      setConnectionStatus('error');
+    }
+  };
+
+  // Show login screen if not logged in, otherwise show game
+  if (!isLoggedIn) {
+    return <LoginScreen onLogin={handleLogin} onReconnect={handleReconnect} />;
+  }
 
   return (
     <div className="relative h-screen w-screen overflow-hidden">

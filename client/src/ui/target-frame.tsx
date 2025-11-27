@@ -5,8 +5,6 @@ import { usePlayerStore } from "../stores/playerStore"
 export function TargetFrame() {
   const { target } = usePlayerStore()
 
-  console.log(`[TARGET_FRAME] Render - target:`, target);
-
   if (!target) return null
 
   const health = target.hp || 0

@@ -7,6 +7,7 @@ import {
   Renderable,
   Stats,
 } from "@shared/ecs/components";
+import { ItemSystem } from "../systems/ItemSystem";
 import {
   PlayerJoinMessage,
   PlayerLeaveMessage,
@@ -23,7 +24,8 @@ export class PlayerManager {
 
   constructor(
     private server: WebSocketServer,
-    private world: any // ServerWorld - using any to avoid circular imports
+    private world: any, // ServerWorld - using any to avoid circular imports
+    private itemSystem: ItemSystem
   ) {
     this.setupMessageHandlers();
   }
@@ -114,6 +116,18 @@ export class PlayerManager {
     this.world.addComponent(entityId, velocity);
     this.world.addComponent(entityId, renderable);
     this.world.addComponent(entityId, stats);
+
+    // Initialize inventory
+    this.itemSystem.initializePlayerInventory(entityId, playerId);
+
+    // Give starting items
+    this.itemSystem.addItemsToInventory(playerId, [
+      { itemId: "health_potion", quantity: 5 },
+      { itemId: "mana_potion", quantity: 3 },
+      { itemId: "wooden_sword", quantity: 1 },
+      { itemId: "leather_armor", quantity: 1 },
+      { itemId: "copper_ore", quantity: 10 },
+    ]);
 
     // Track the mapping
     this.playerEntities.set(playerId, entityId);
@@ -253,6 +267,7 @@ export class PlayerManager {
   // Get all players for world state
   getAllPlayers(): Array<{
     id: string;
+    name: string;
     position: { x: number; y: number; z?: number };
     velocity?: { vx: number; vy: number };
     stats: { hp: number; maxHp: number; level: number };
@@ -266,10 +281,12 @@ export class PlayerManager {
       const velocity = this.world.getComponent(entityId, "velocity");
       const renderable = this.world.getComponent(entityId, "renderable");
       const stats = this.world.getComponent(entityId, "stats");
+      const player = this.world.getComponent(entityId, "player");
 
-      if (position && stats) {
+      if (position && stats && player) {
         players.push({
           id: playerId,
+          name: player.name,
           position: { x: position.x, y: position.y, z: position.z },
           velocity: velocity ? { vx: velocity.vx, vy: velocity.vy } : undefined,
           stats: {

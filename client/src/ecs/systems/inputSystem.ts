@@ -13,11 +13,19 @@ export class InputSystem implements System {
   private mousePosition = { x: 0, y: 0 };
   private mouseButtons: Set<number> = new Set();
   private networkSystem?: any; // NetworkSystem - using any to avoid circular imports
+  private renderSystem?: any; // RenderSystem - for camera position
 
   constructor(canvas: HTMLCanvasElement) {
+    console.log("[INPUT] InputSystem created");
     // Keyboard event listeners
-    window.addEventListener("keydown", (e) => this.keys.add(e.code));
-    window.addEventListener("keyup", (e) => this.keys.delete(e.code));
+    window.addEventListener("keydown", (e) => {
+      console.log("[INPUT] Key down:", e.code);
+      this.keys.add(e.code);
+    });
+    window.addEventListener("keyup", (e) => {
+      console.log("[INPUT] Key up:", e.code);
+      this.keys.delete(e.code);
+    });
 
     // Mouse event listeners
     canvas.addEventListener("mousedown", (e) => {
@@ -31,6 +39,10 @@ export class InputSystem implements System {
     canvas.addEventListener("click", (e) => {
       this.handleClick(e, canvas);
     });
+    canvas.addEventListener("contextmenu", (e) => {
+      e.preventDefault(); // Prevent browser context menu
+      this.handleRightClick(e, canvas);
+    });
     canvas.addEventListener("mousemove", (e) => {
       this.updateMousePosition(e, canvas);
     });
@@ -41,9 +53,28 @@ export class InputSystem implements System {
     this.networkSystem = networkSystem;
   }
 
+  // Set the render system for camera position access
+  setRenderSystem(renderSystem: any) {
+    this.renderSystem = renderSystem;
+  }
+
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
+    // Debug logging
+    if (Math.random() < 0.01) {
+      // Log ~1% of frames
+      console.log(
+        "[INPUT] InputSystem update - entities:",
+        entities.size,
+        "keys pressed:",
+        this.keys.size
+      );
+    }
+
     // Handle mouse clicks for targeting
     this.handleMouseClicks(entities);
+
+    // Handle right-clicks for harvesting
+    this.handleRightClicks(entities);
 
     // Calculate current input state
     const inputState = {
@@ -52,6 +83,15 @@ export class InputSystem implements System {
       left: this.keys.has("KeyA") || this.keys.has("ArrowLeft"),
       right: this.keys.has("KeyD") || this.keys.has("ArrowRight"),
     };
+
+    if (
+      inputState.up ||
+      inputState.down ||
+      inputState.left ||
+      inputState.right
+    ) {
+      console.log("[INPUT] Movement input detected:", inputState);
+    }
 
     // Send input state to network system
     if (this.networkSystem) {
@@ -123,7 +163,18 @@ export class InputSystem implements System {
     this.pendingClick = { x: clickX, y: clickY };
   }
 
+  private handleRightClick(event: MouseEvent, canvas: HTMLCanvasElement): void {
+    // Get click position in canvas coordinates
+    const rect = canvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+
+    // Store the right-click for processing in the update loop
+    this.pendingRightClick = { x: clickX, y: clickY };
+  }
+
   private pendingClick?: { x: number; y: number };
+  private pendingRightClick?: { x: number; y: number };
 
   private handleMouseClicks(entities: Map<EntityId, Entity>): void {
     if (!this.pendingClick || !this.networkSystem) return;
@@ -132,16 +183,14 @@ export class InputSystem implements System {
 
     console.log(`[INPUT] Processing click, ${entities.size} entities in world`);
 
-    // Find entity at click position (accounting for camera position from render system)
-    // For now, we'll need to get camera position - this is a bit hacky but works
-    const cameraX = (this.networkSystem as any).cameraX || 0;
-    const cameraY = (this.networkSystem as any).cameraY || 0;
+    // Get camera position from render system
+    const cameraPos = this.renderSystem?.getCameraPosition() || { x: 0, y: 0 };
 
     // Convert screen coordinates to world coordinates
-    const worldX = clickX + cameraX;
-    const worldY = clickY + cameraY;
+    const worldX = clickX + cameraPos.x;
+    const worldY = clickY + cameraPos.y;
 
-    console.log(`[INPUT] Camera at (${cameraX}, ${cameraY})`);
+    console.log(`[INPUT] Camera at (${cameraPos.x}, ${cameraPos.y})`);
 
     // Find entities that were clicked on
     let clickedEntity: EntityId | undefined;
@@ -193,5 +242,83 @@ export class InputSystem implements System {
 
     // Clear pending click
     this.pendingClick = undefined;
+  }
+
+  private handleRightClicks(entities: Map<EntityId, Entity>): void {
+    if (!this.pendingRightClick || !this.networkSystem) return;
+
+    const { x: clickX, y: clickY } = this.pendingRightClick;
+
+    // Get camera position from render system
+    const cameraPos = this.renderSystem?.getCameraPosition() || { x: 0, y: 0 };
+
+    // Convert screen coordinates to world coordinates
+    const worldX = clickX + cameraPos.x;
+    const worldY = clickY + cameraPos.y;
+
+    // Find player position for distance checking
+    const playerEntity = Array.from(entities.values()).find(
+      (entity) =>
+        entity.components.has("position") &&
+        entity.components.has("player") &&
+        (entity.components.get("player") as any)?.isLocal
+    );
+
+    if (!playerEntity) {
+      this.pendingRightClick = undefined;
+      return;
+    }
+
+    const playerPosition = playerEntity.components.get("position") as Position;
+    if (!playerPosition) {
+      this.pendingRightClick = undefined;
+      return;
+    }
+
+    // Find harvestable game objects near the click
+    let clickedHarvestableObject: EntityId | undefined;
+    const harvestRange = 100; // pixels - should match server validation
+
+    for (const [entityId, entity] of entities) {
+      const position = entity.components.get("position") as Position;
+      const gameObject = entity.components.get("gameObject") as any;
+
+      if (position && gameObject && gameObject.harvestable) {
+        // Check if click is within entity bounds (32x32 centered on position)
+        const halfSize = 16;
+        const clickedOnObject =
+          worldX >= position.x - halfSize &&
+          worldX <= position.x + halfSize &&
+          worldY >= position.y - halfSize &&
+          worldY <= position.y + halfSize;
+
+        if (clickedOnObject) {
+          // Check distance from player to object
+          const dx = position.x - playerPosition.x;
+          const dy = position.y - playerPosition.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+
+          if (distance <= harvestRange) {
+            clickedHarvestableObject = entityId;
+            console.log(
+              `[INPUT] Right-clicked harvestable object ${entityId} (${gameObject.name}) at distance ${distance.toFixed(1)}px`
+            );
+            break;
+          } else {
+            console.log(
+              `[INPUT] Harvestable object ${entityId} (${gameObject.name}) too far (${distance.toFixed(1)}px > ${harvestRange}px)`
+            );
+          }
+        }
+      }
+    }
+
+    // Send harvest request if we found a valid target
+    if (clickedHarvestableObject) {
+      this.networkSystem.harvestObject(clickedHarvestableObject);
+    }
+
+    // Clear pending right-click
+    this.pendingRightClick = undefined;
   }
 }

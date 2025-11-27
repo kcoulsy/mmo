@@ -104,7 +104,7 @@ export interface TargetInfoMessage extends NetworkMessage {
   targetEntityId: string;
   targetInfo: {
     name: string;
-    type: "player" | "npc" | "monster";
+    type: 'player' | 'npc' | 'monster';
     level?: number;
     hp?: number;
     maxHp?: number;
@@ -117,7 +117,6 @@ export interface WorldStateMessage extends NetworkMessage {
   type: "WORLD_STATE";
   players: Array<{
     id: string;
-    name: string;
     position: { x: number; y: number; z?: number };
     velocity?: { vx: number; vy: number };
     stats: {

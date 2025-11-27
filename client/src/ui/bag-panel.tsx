@@ -1,6 +1,8 @@
 "use client"
 
 import { X } from "lucide-react"
+import { usePlayerStore } from "../stores/playerStore"
+import { ITEM_TEMPLATES } from "@shared/items"
 
 interface BagItem {
   id: number
@@ -19,32 +21,23 @@ const rarityColors = {
 }
 
 export function BagPanel({ onClose }: { onClose: () => void }) {
-  const items: (BagItem | null)[] = [
-    { id: 1, name: "Health Potion", icon: "🧪", quantity: 15, rarity: "common" },
-    { id: 2, name: "Mana Potion", icon: "💙", quantity: 12, rarity: "common" },
-    { id: 3, name: "Shadowstrike Dagger", icon: "🗡️", quantity: 1, rarity: "epic" },
-    { id: 4, name: "Leather Armor", icon: "🛡️", quantity: 1, rarity: "rare" },
-    { id: 5, name: "Gold Coins", icon: "💰", quantity: 2847, rarity: "common" },
-    { id: 6, name: "Lockpick", icon: "🔓", quantity: 28, rarity: "common" },
-    { id: 7, name: "Poison Vial", icon: "☠️", quantity: 8, rarity: "uncommon" },
-    { id: 8, name: "Smoke Bomb", icon: "💣", quantity: 5, rarity: "uncommon" },
-    { id: 9, name: "Ancient Rune", icon: "📜", quantity: 1, rarity: "legendary" },
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-  ]
+  const { inventory } = usePlayerStore()
+
+  // Convert inventory slots to display items
+  const items: (BagItem | null)[] = inventory.slots.map((slot, index) => {
+    if (!slot) return null
+
+    const template = ITEM_TEMPLATES[slot.itemId]
+    if (!template) return null
+
+    return {
+      id: index,
+      name: template.name,
+      icon: template.icon || "❓",
+      quantity: slot.quantity,
+      rarity: template.rarity,
+    }
+  })
 
   return (
     <div className="w-96 bg-card/95 border-2 border-border rounded-lg backdrop-blur-sm">
@@ -79,14 +72,14 @@ export function BagPanel({ onClose }: { onClose: () => void }) {
                     <div className="bg-card/95 border border-border rounded px-2 py-1 backdrop-blur-sm whitespace-nowrap">
                       <p
                         className={`text-xs font-semibold ${item.rarity === "legendary"
-                            ? "text-orange-400"
-                            : item.rarity === "epic"
-                              ? "text-purple-400"
-                              : item.rarity === "rare"
-                                ? "text-blue-400"
-                                : item.rarity === "uncommon"
-                                  ? "text-green-400"
-                                  : "text-foreground"
+                          ? "text-orange-400"
+                          : item.rarity === "epic"
+                            ? "text-purple-400"
+                            : item.rarity === "rare"
+                              ? "text-blue-400"
+                              : item.rarity === "uncommon"
+                                ? "text-green-400"
+                                : "text-foreground"
                           }`}
                       >
                         {item.name}
@@ -102,8 +95,10 @@ export function BagPanel({ onClose }: { onClose: () => void }) {
 
       {/* Footer */}
       <div className="p-3 border-t border-border flex items-center justify-between">
-        <span className="text-muted-foreground text-xs">9 / 32 slots</span>
-        <span className="text-accent text-xs font-semibold">💰 2,847 Gold</span>
+        <span className="text-muted-foreground text-xs">
+          {items.filter(item => item !== null).length} / {inventory.maxSlots} slots
+        </span>
+        <span className="text-accent text-xs font-semibold">💰 0 Gold</span>
       </div>
     </div>
   )

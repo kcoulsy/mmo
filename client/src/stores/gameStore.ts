@@ -18,6 +18,11 @@ export interface GameState {
   connectionStatus: 'disconnected' | 'connecting' | 'connected' | 'error';
   lastPing: number;
 
+  // Login state
+  isLoggedIn: boolean;
+  playerName: string;
+  isReconnecting: boolean;
+
   // Players
   otherPlayers: Record<string, OtherPlayer>;
   playerCount: number;
@@ -41,6 +46,11 @@ interface GameStore extends GameState {
   setConnected: (connected: boolean) => void;
   setConnectionStatus: (status: GameState['connectionStatus']) => void;
   updatePing: (ping: number) => void;
+
+  // Login state
+  setLoggedIn: (loggedIn: boolean) => void;
+  setPlayerName: (name: string) => void;
+  setIsReconnecting: (reconnecting: boolean) => void;
 
   // Players
   addPlayer: (player: OtherPlayer) => void;
@@ -68,6 +78,10 @@ export const useGameStore = create<GameStore>((set, get) => ({
   connectionStatus: 'disconnected',
   lastPing: 0,
 
+  isLoggedIn: false,
+  playerName: '',
+  isReconnecting: false,
+
   otherPlayers: {},
   playerCount: 0,
 
@@ -85,6 +99,11 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setConnected: (isConnected) => set({ isConnected }),
   setConnectionStatus: (connectionStatus) => set({ connectionStatus }),
   updatePing: (lastPing) => set({ lastPing }),
+
+  // Login state
+  setLoggedIn: (isLoggedIn) => set({ isLoggedIn }),
+  setPlayerName: (playerName) => set({ playerName }),
+  setIsReconnecting: (isReconnecting) => set({ isReconnecting }),
 
   // Players
   addPlayer: (player) => set((state) => ({

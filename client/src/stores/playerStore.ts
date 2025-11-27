@@ -31,6 +31,22 @@ export interface TargetInfo {
   position: { x: number; y: number; z?: number };
 }
 
+export interface InventoryItem {
+  itemId: string;
+  name: string;
+  icon: string;
+  quantity: number;
+  rarity: "common" | "uncommon" | "rare" | "epic" | "legendary";
+  durability?: number;
+  maxDurability?: number;
+  description?: string;
+}
+
+export interface InventoryState {
+  slots: (InventoryItem | null)[];
+  maxSlots: number;
+}
+
 export interface PlayerState {
   id: string;
   name: string;
@@ -40,6 +56,7 @@ export interface PlayerState {
   isLocal: boolean;
   target?: TargetInfo | null;
   tradeskills: Tradeskill[];
+  inventory: InventoryState;
 }
 
 interface PlayerStore extends PlayerState {
@@ -54,6 +71,10 @@ interface PlayerStore extends PlayerState {
   gainExperience: (amount: number) => void;
   updateTradeskill: (skillName: string, updates: Partial<Tradeskill>) => void;
   gainTradeskillExperience: (skillName: string, amount: number) => void;
+  updateInventory: (inventory: InventoryState) => void;
+  addInventoryItem: (slot: number, item: InventoryItem) => void;
+  removeInventoryItem: (slot: number) => void;
+  updateInventoryItem: (slot: number, updates: Partial<InventoryItem>) => void;
 }
 
 export const usePlayerStore = create<PlayerStore>((set, get) => ({
@@ -98,6 +119,10 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
       icon: "🌿",
     },
   ],
+  inventory: {
+    slots: new Array(32).fill(null),
+    maxSlots: 32,
+  },
 
   setPlayer: (player) => set((state) => ({ ...state, ...player })),
 
@@ -169,5 +194,39 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
           experienceToNext: expForNextLevel,
         };
       }),
+    })),
+
+  updateInventory: (inventory) => set({ inventory }),
+
+  addInventoryItem: (slot, item) =>
+    set((state) => ({
+      inventory: {
+        ...state.inventory,
+        slots: state.inventory.slots.map((existingItem, index) =>
+          index === slot ? item : existingItem
+        ),
+      },
+    })),
+
+  removeInventoryItem: (slot) =>
+    set((state) => ({
+      inventory: {
+        ...state.inventory,
+        slots: state.inventory.slots.map((existingItem, index) =>
+          index === slot ? null : existingItem
+        ),
+      },
+    })),
+
+  updateInventoryItem: (slot, updates) =>
+    set((state) => ({
+      inventory: {
+        ...state.inventory,
+        slots: state.inventory.slots.map((existingItem, index) =>
+          index === slot && existingItem
+            ? { ...existingItem, ...updates }
+            : existingItem
+        ),
+      },
     })),
 }));
