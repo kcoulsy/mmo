@@ -2,6 +2,7 @@
 import { Kysely, SqliteDialect, sql } from "kysely";
 import Database from "better-sqlite3";
 import { Database as DatabaseSchema } from "./schemas/database";
+import { ITEM_TEMPLATES } from "../game/items/data/items";
 
 // Create database connection
 const dialect = new SqliteDialect({
@@ -18,6 +19,10 @@ export class DatabaseService {
     try {
       // Create tables if they don't exist
       await this.createTables();
+
+      // Populate items table with templates
+      await this.populateItemsTable();
+
       console.log("Database initialized successfully");
     } catch (error) {
       console.error("Database initialization failed:", error);
@@ -249,6 +254,57 @@ export class DatabaseService {
         col.notNull().defaultTo(sql`CURRENT_TIMESTAMP`)
       )
       .execute();
+  }
+
+  private static async populateItemsTable(): Promise<void> {
+    // Check if items table is already populated
+    const existingCount = await db
+      .selectFrom("items")
+      .select(db.fn.count("id").as("count"))
+      .executeTakeFirst();
+
+    if (existingCount && Number(existingCount.count) > 0) {
+      console.log("Items table already populated, skipping...");
+      return;
+    }
+
+    console.log("Populating items table with templates...");
+
+    const itemsToInsert = Object.values(ITEM_TEMPLATES).map((template) => {
+      const item = {
+        id: template.id,
+        templateId: template.id,
+        name: template.name,
+        description: template.description || null,
+        type: template.type,
+        rarity: template.rarity,
+        level: template.level,
+        stats: JSON.stringify(template.stats || {}),
+        durability: template.durability || null,
+        maxDurability: template.maxDurability || null,
+        stackable: template.stackable,
+        maxStack: template.maxStack || null,
+      };
+
+      // Debug: Check for any non-primitive values
+      Object.entries(item).forEach(([key, value]) => {
+        if (
+          value !== null &&
+          typeof value !== "string" &&
+          typeof value !== "number" &&
+          typeof value !== "boolean"
+        ) {
+          console.error(`Invalid type for ${key}:`, typeof value, value);
+        }
+      });
+
+      return item;
+    });
+
+    if (itemsToInsert.length > 0) {
+      await db.insertInto("items").values(itemsToInsert).execute();
+      console.log(`Populated items table with ${itemsToInsert.length} items`);
+    }
   }
 
   static async close(): Promise<void> {

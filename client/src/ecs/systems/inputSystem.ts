@@ -92,17 +92,6 @@ export class InputSystem implements System {
   }
 
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
-    // Debug logging
-    if (Math.random() < 0.01) {
-      // Log ~1% of frames
-      console.log(
-        "[INPUT] InputSystem update - entities:",
-        entities.size,
-        "keys pressed:",
-        this.keys.size
-      );
-    }
-
     // Handle mouse clicks for targeting
     this.handleMouseClicks(entities);
 
@@ -308,14 +297,7 @@ export class InputSystem implements System {
 
           if (distance <= harvestRange) {
             clickedHarvestableObject = entityId;
-            console.log(
-              `[INPUT] Right-clicked harvestable object ${entityId} (${gameObject.name}) at distance ${distance.toFixed(1)}px`
-            );
             break;
-          } else {
-            console.log(
-              `[INPUT] Harvestable object ${entityId} (${gameObject.name}) too far (${distance.toFixed(1)}px > ${harvestRange}px)`
-            );
           }
         }
       }

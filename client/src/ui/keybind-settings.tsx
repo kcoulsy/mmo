@@ -80,7 +80,6 @@ export function KeybindSettings({ onClose }: KeybindSettingsProps) {
   };
 
   const handleClose = () => {
-    console.log('[KEYBIND SETTINGS] Close button clicked');
     closeKeybindSettings();
     if (onClose) onClose();
   };
@@ -108,11 +107,10 @@ export function KeybindSettings({ onClose }: KeybindSettingsProps) {
               <button
                 key={category}
                 onClick={() => setSelectedCategory(category)}
-                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${
-                  selectedCategory === category
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted hover:bg-muted/80 text-muted-foreground'
-                }`}
+                className={`px-3 py-1 rounded-md text-sm font-medium transition-colors ${selectedCategory === category
+                  ? 'bg-primary text-primary-foreground'
+                  : 'bg-muted hover:bg-muted/80 text-muted-foreground'
+                  }`}
               >
                 {category.charAt(0).toUpperCase() + category.slice(1)}
               </button>
@@ -135,17 +133,15 @@ export function KeybindSettings({ onClose }: KeybindSettingsProps) {
                   </div>
 
                   <div className="flex items-center gap-2">
-                    <div className={`px-3 py-1 rounded-md text-sm font-mono min-w-[60px] text-center ${
-                      isCurrentlyBinding
-                        ? 'bg-primary text-primary-foreground animate-pulse'
-                        : 'bg-muted text-muted-foreground'
-                    }`}>
+                    <div className={`px-3 py-1 rounded-md text-sm font-mono min-w-[60px] text-center ${isCurrentlyBinding
+                      ? 'bg-primary text-primary-foreground animate-pulse'
+                      : 'bg-muted text-muted-foreground'
+                      }`}>
                       {isCurrentlyBinding ? 'Press key...' : currentKey ? formatKeyName(currentKey) : 'Unbound'}
                     </div>
 
                     <button
                       onClick={() => {
-                        console.log('[KEYBIND SETTINGS] Change button clicked for:', action.id);
                         startBinding(action.id);
                       }}
                       disabled={isBinding}
@@ -164,7 +160,6 @@ export function KeybindSettings({ onClose }: KeybindSettingsProps) {
         <div className="flex items-center justify-between p-6 border-t border-border">
           <button
             onClick={() => {
-              console.log('[KEYBIND SETTINGS] Reset to defaults clicked');
               resetToDefaults();
             }}
             className="px-4 py-2 bg-muted hover:bg-muted/80 text-muted-foreground text-sm rounded-md transition-colors"
@@ -176,7 +171,6 @@ export function KeybindSettings({ onClose }: KeybindSettingsProps) {
             {isBinding && (
               <button
                 onClick={() => {
-                  console.log('[KEYBIND SETTINGS] Cancel binding clicked');
                   cancelBinding();
                 }}
                 className="px-4 py-2 bg-muted hover:bg-muted/80 text-muted-foreground text-sm rounded-md transition-colors"

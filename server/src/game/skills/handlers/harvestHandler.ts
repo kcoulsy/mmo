@@ -233,7 +233,13 @@ async function processHarvestAction(
 
   // Add item rewards to player's inventory
   if (itemsGained.length > 0) {
-    await world.itemManager.addItemsToInventory(playerId, itemsGained);
+    const player = world.playerManager.getPlayer(playerId);
+    if (!player) {
+      throw new Error(
+        `Player ${playerId} not found when adding harvested items`
+      );
+    }
+    await world.itemManager.addItemsToInventory(player, itemsGained);
     console.log(
       `${playerId} harvested ${template?.name} and received:`,
       itemsGained.map(

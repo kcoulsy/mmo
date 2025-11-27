@@ -8,19 +8,14 @@ export function GameMenu({ onDisconnect }: GameMenuProps) {
   const { closeGameMenu, openKeybindSettings } = useKeybindStore();
 
   const handleKeybinds = () => {
-    console.log('[GAME MENU] Keybinds button clicked');
     closeGameMenu();
     openKeybindSettings();
   };
 
   const handleExitGame = () => {
-    console.log('[GAME MENU] Exit Game button clicked');
     closeGameMenu();
     if (onDisconnect) {
-      console.log('[GAME MENU] Calling onDisconnect');
       onDisconnect();
-    } else {
-      console.log('[GAME MENU] No onDisconnect function provided');
     }
   };
 

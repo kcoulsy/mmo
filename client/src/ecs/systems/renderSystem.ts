@@ -26,32 +26,6 @@ export class RenderSystem implements System {
   }
 
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
-    // Debug logging - only once per second
-    const now = Date.now();
-    if (now - this.lastLogTime > 1000) {
-      this.lastLogTime = now;
-      console.log(`[RENDER] Total entities: ${entities.size}`);
-
-      const renderableEntities = Array.from(entities.values()).filter(
-        (entity) =>
-          entity.components.has("renderable") &&
-          entity.components.has("position")
-      );
-      console.log(`[RENDER] Renderable entities: ${renderableEntities.length}`);
-
-      const gameObjectEntities = renderableEntities.filter((entity) =>
-        entity.components.has("gameObject")
-      );
-      console.log(
-        `[RENDER] Game object entities: ${gameObjectEntities.length}`
-      );
-
-      const playerEntities = renderableEntities.filter((entity) =>
-        entity.components.has("player")
-      );
-      console.log(`[RENDER] Player entities: ${playerEntities.length}`);
-    }
-
     // Update camera position based on player position
     this.updateCamera(entities);
 
@@ -85,12 +59,6 @@ export class RenderSystem implements System {
         | undefined;
 
       // Debug logging for game objects
-      if (gameObject && now - this.lastLogTime > 1000) {
-        console.log(
-          `[RENDER] Rendering game object: ${gameObject.name} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), screen pos: (${(position.x - this.cameraX).toFixed(1)}, ${(position.y - this.cameraY).toFixed(1)})`
-        );
-      }
-
       this.renderEntity(position, renderable, player, gameObject);
     }
 
@@ -106,13 +74,11 @@ export class RenderSystem implements System {
     });
 
     if (!playerEntity) {
-      console.log("[RENDER] No local player found for camera");
       return;
     }
 
     const playerPosition = playerEntity.components.get("position") as Position;
     if (!playerPosition) {
-      console.log("[RENDER] Local player has no position for camera");
       return;
     }
 

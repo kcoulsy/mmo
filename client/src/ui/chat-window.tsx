@@ -50,7 +50,6 @@ export function ChatWindow({ onSendMessage }: ChatWindowProps) {
     }
 
     if (message) {
-      console.log(`[CHAT UI] Sending message: "${message}" in mode: ${mode}`);
       onSendMessage(message, mode);
       setInputValue("");
     }

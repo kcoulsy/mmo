@@ -139,23 +139,18 @@ export const useKeybindStore = create<KeybindStore>((set, get) => ({
 
   // Menu controls
   toggleGameMenu: () => {
-    console.log("[KEYBIND STORE] toggleGameMenu called");
     set((state) => {
       const newShowGameMenu = !state.showGameMenu;
-      console.log("[KEYBIND STORE] setting showGameMenu to:", newShowGameMenu);
       return { showGameMenu: newShowGameMenu };
     });
   },
   closeGameMenu: () => {
-    console.log("[KEYBIND STORE] closeGameMenu called");
     set({ showGameMenu: false });
   },
   openKeybindSettings: () => {
-    console.log("[KEYBIND STORE] openKeybindSettings called");
     set({ showKeybindSettings: true });
   },
   closeKeybindSettings: () => {
-    console.log("[KEYBIND STORE] closeKeybindSettings called");
     set({ showKeybindSettings: false });
   },
 

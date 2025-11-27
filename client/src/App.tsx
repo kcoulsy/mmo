@@ -42,9 +42,8 @@ export function App() {
 
   // Initialize game world when logged in
   useEffect(() => {
-    console.log('[APP] useEffect triggered - isLoggedIn:', isLoggedIn, 'gameInitialized:', gameInitializedRef.current, 'canvasRef:', !!canvasRef.current);
     if (!isLoggedIn || gameInitializedRef.current || !canvasRef.current) return;
-    console.log('[APP] Calling initializeGame');
+
     initializeGame();
   }, [isLoggedIn]);
 
@@ -52,20 +51,16 @@ export function App() {
   // Handle disconnects - this will be set up in the network system
 
   const initializeGame = () => {
-    console.log('[APP] initializeGame called');
     if (gameInitializedRef.current || !canvasRef.current || !worldRef.current) {
-      console.log('[APP] initializeGame early return - initialized:', gameInitializedRef.current, 'canvas:', !!canvasRef.current, 'world:', !!worldRef.current);
       return;
     }
     gameInitializedRef.current = true;
-    console.log('[APP] initializeGame proceeding');
 
     const canvas = canvasRef.current;
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     canvas.style.width = window.innerWidth + 'px';
     canvas.style.height = window.innerHeight + 'px';
-    console.log('[APP] Canvas dimensions set to:', canvas.width, 'x', canvas.height);
 
     // Reuse existing world and network system from login
     const world = worldRef.current;
@@ -81,18 +76,13 @@ export function App() {
     inputSystem.setNetworkSystem(networkSystem);
     inputSystem.setRenderSystem(renderSystem);
 
-    // Connect input system to UI toggle functions
-    console.log('[APP] Setting toggleGameMenu callback on InputSystem');
+    // Connect input system to UI toggle functions  
     inputSystem.setToggleGameMenuCallback(() => {
-      console.log('[APP] InputSystem toggleGameMenu callback called');
       setShowGameMenu(prev => !prev);
     });
-    console.log('[APP] toggleGameMenu callback set successfully');
 
     // Set up chat message handling
-    console.log('[APP] Setting up chat message callback');
     networkSystem.setChatMessageCallback((message: any) => {
-      console.log('[APP] Chat callback called:', message);
       addMessage(message);
 
       // Create chat bubble above the player (if not our own message)
@@ -146,28 +136,23 @@ export function App() {
 
     // Set callback to update player store with server data
     networkSystem.setPlayerUpdateCallback((playerData: any) => {
-      console.log('[APP] Updating player store with:', playerData);
       setPlayer(playerData);
     });
 
     // Set callback for when player successfully joins with initial data
     networkSystem.setPlayerJoinedCallback(() => {
-      console.log('[APP] Player successfully joined with initial data, showing game');
       setLoggedIn(true);
       setIsReconnecting(false);
     });
 
     // Set callback to update target information
     networkSystem.setTargetUpdateCallback((targetData: any) => {
-      console.log(`[APP] Target update:`, targetData);
       if (targetData.info && targetData.info.name) {
-        console.log(`[APP] Setting target to: ${targetData.info.name}`);
         setTarget({
           entityId: targetData.entityId,
           ...targetData.info,
         });
       } else {
-        console.log(`[APP] Clearing target`);
         clearTarget();
       }
     });
@@ -199,10 +184,8 @@ export function App() {
     }
 
     // Start game loop
-    console.log('[APP] Starting game loop');
     animationFrameRef.current = requestAnimationFrame(gameLoop);
 
-    console.log('Ironwild client started!');
   };
 
   const handleLogin = async (playerName: string) => {
@@ -263,15 +246,12 @@ export function App() {
 
       // Set up callbacks
       networkSystem.setPlayerJoinedCallback(() => {
-        console.log('[APP] Player successfully joined with initial data, showing game');
-        console.log('[APP] Setting isLoggedIn to true');
         setLoggedIn(true);
         setIsReconnecting(false);
       });
 
       // Set up disconnect handling
       gameClient.setDisconnectCallback(() => {
-        console.log('[APP] Disconnected from server during login');
         setLoggedIn(false);
         setIsReconnecting(true);
         setConnectionStatus('disconnected');
@@ -279,7 +259,6 @@ export function App() {
       });
 
       await gameClient.connect();
-      console.log('Connected to game server!');
       setConnected(true);
       setConnectionStatus('connected');
 
@@ -290,7 +269,6 @@ export function App() {
         playerName: playerName,
       };
       gameClient.send(joinMessage);
-      console.log('Sent join request to server with name:', playerName);
 
       // Wait for PLAYER_JOIN response before showing game
       // This will be handled by the network system's playerJoinedCallback
@@ -313,8 +291,6 @@ export function App() {
   };
 
   const handleDisconnect = () => {
-    console.log('[APP] Disconnecting from game');
-
     // Stop game loop
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);

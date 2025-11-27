@@ -514,13 +514,7 @@ export class PlayerManager {
   ): void {
     for (const player of this.players.values()) {
       // Check distance from player to position
-      if (
-        MovementSystem.isWithinDistance(
-          player.position,
-          position,
-          range
-        )
-      ) {
+      if (MovementSystem.isWithinDistance(player.position, position, range)) {
         this.world.sendToPlayer(player.id, message);
       }
     }

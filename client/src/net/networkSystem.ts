@@ -85,12 +85,6 @@ export class NetworkSystem implements System {
   }
 
   update(entities: Map<EntityId, any>, _deltaTime: number): void {
-    // Debug logging
-    if (Math.random() < 0.01) {
-      // Log ~1% of frames
-      console.log("[NETWORK] NetworkSystem update - entities:", entities.size);
-    }
-
     const currentTime = Date.now();
 
     // Check if input has changed
@@ -258,8 +252,6 @@ export class NetworkSystem implements System {
   setTarget(targetEntityId: string) {
     if (!this.localPlayerId) return;
 
-    console.log(`[NETWORK] Sending SET_TARGET for entity: ${targetEntityId}`);
-
     // Send target request to server
     this.client.send({
       type: "SET_TARGET" as any,
@@ -273,8 +265,6 @@ export class NetworkSystem implements System {
   clearTarget() {
     if (!this.localPlayerId) return;
 
-    console.log(`[NETWORK] Sending CLEAR_TARGET`);
-
     // Send clear target request to server
     this.client.send({
       type: "CLEAR_TARGET" as any,
@@ -285,7 +275,6 @@ export class NetworkSystem implements System {
 
   // Set the server-assigned player ID and update the temp entity
   setServerPlayerId(playerId: string) {
-    console.log(`[NETWORK] Setting server player ID: ${playerId}`);
     this.localPlayerId = playerId;
 
     // If we have a temp entity, update its player component with the server ID
@@ -538,8 +527,6 @@ export class NetworkSystem implements System {
 
     // Track the remote player
     this.remotePlayers.set(playerId, entityId);
-
-    console.log(`Remote player ${playerId} (${playerData.name}) joined`);
   }
 
   private handlePlayerLeave(message: PlayerLeaveMessage) {
@@ -549,7 +536,6 @@ export class NetworkSystem implements System {
     if (entityId) {
       this.world.destroyEntity(entityId);
       this.remotePlayers.delete(playerId);
-      console.log(`Remote player ${playerId} left`);
     }
   }
 
@@ -657,14 +643,6 @@ export class NetworkSystem implements System {
   }
 
   private handleWorldState(message: WorldStateMessage) {
-    console.log(
-      "[NETWORK] Received WORLD_STATE with",
-      message.players.length,
-      "players and",
-      message.entities?.length || 0,
-      "entities"
-    );
-
     // Create a simple hash of the world state to detect changes
     const stateHash = this.createWorldStateHash(
       message.players,
@@ -673,7 +651,6 @@ export class NetworkSystem implements System {
 
     // Only process if the world state actually changed
     if (stateHash === this.lastWorldStateHash) {
-      console.log("[NETWORK] World state unchanged, skipping");
       return; // Skip processing if nothing changed - no re-renders triggered
     }
 
@@ -779,16 +756,6 @@ export class NetworkSystem implements System {
         for (const component of entityData.components) {
           this.world.addComponent(entityId, component);
         }
-
-        if (hasGameObjectComponent) {
-          console.log(
-            `[NETWORK] Created game object entity ${entityData.id} (${entityId}) from world state`
-          );
-        } else {
-          console.log(
-            `Created non-game-object entity ${entityData.id || "unknown"} (${entityId}) from world state`
-          );
-        }
       } else {
         // Update existing entity components
         for (const component of entityData.components) {
@@ -866,8 +833,6 @@ export class NetworkSystem implements System {
 
     // Track the remote player
     this.remotePlayers.set(playerData.id, entityId);
-
-    console.log(`Created remote player ${playerData.id} from world state`);
   }
 
   // Get all remote player entities
@@ -936,39 +901,25 @@ export class NetworkSystem implements System {
   }
 
   private handleChatMessage(message: ChatMessage) {
-    console.log(
-      `[NETWORK] Received chat message: "${message.message}" from ${message.playerName} (mode: ${message.mode})`
-    );
     // Call the chat message callback if set
     if (this.onChatMessage) {
       this.onChatMessage(message);
     } else {
-      console.log(`[NETWORK] No chat message callback set!`);
     }
   }
 
   private handleTargetInfo(message: TargetInfoMessage) {
-    console.log(
-      `[NETWORK] Received TARGET_INFO for ${message.targetEntityId}: "${message.targetInfo.name}"`
-    );
-
     // Call the target update callback if set
     if (this.onTargetUpdate) {
-      console.log(`[NETWORK] Calling onTargetUpdate callback`);
       this.onTargetUpdate({
         entityId: message.targetEntityId,
         info: message.targetInfo,
       });
     } else {
-      console.log(`[NETWORK] No onTargetUpdate callback set!`);
     }
   }
 
   private handleInventoryUpdate(message: InventoryUpdateMessage) {
-    console.log(
-      `[NETWORK] Received INVENTORY_UPDATE for player ${message.playerId}`
-    );
-
     // Convert server inventory format to client format
     const clientInventory = {
       slots: message.inventory.slots.map((slot) => {
@@ -1001,12 +952,7 @@ export class NetworkSystem implements System {
   }
 
   private handleHarvestResult(message: HarvestResultMessage) {
-    console.log(
-      `[NETWORK] Received HARVEST_RESULT for ${message.gameObjectId}: ${message.success ? "SUCCESS" : "FAILED"}`
-    );
-
     if (!message.success) {
-      console.log(`[HARVEST] Harvest failed: ${message.reason}`);
       return;
     }
 
@@ -1014,45 +960,17 @@ export class NetworkSystem implements System {
     // The server will send a new WORLD_STATE with updated entities
     const gameObjectEntityId = this.remoteEntities.get(message.gameObjectId);
     if (gameObjectEntityId) {
-      console.log(
-        `[HARVEST] Removing depleted game object ${message.gameObjectId} (${gameObjectEntityId}) from client world`
-      );
       this.world.destroyEntity(gameObjectEntityId);
       this.remoteEntities.delete(message.gameObjectId);
       this.clientToServerEntities.delete(gameObjectEntityId);
     }
-
-    // Update player's inventory if items were gained
-    if (message.itemsGained && message.itemsGained.length > 0) {
-      console.log(`[HARVEST] Player gained items:`, message.itemsGained);
-
-      // Trigger inventory update through player store callback
-      if (this.onPlayerUpdate) {
-        // We'll need to get the current inventory and add the new items
-        // For now, just log that items were gained - the next INVENTORY_UPDATE will sync properly
-        console.log(
-          `[HARVEST] Items gained: ${message.itemsGained.map((item) => `${item.quantity}x ${item.itemId}`).join(", ")}`
-        );
-      }
-    }
-
-    if (message.xpGained && message.xpGained > 0) {
-      console.log(`[HARVEST] Gained ${message.xpGained} XP`);
-    }
   }
 
   private handleGameObjectUpdate(message: GameObjectUpdateMessage) {
-    console.log(
-      `[NETWORK] Received GAME_OBJECT_UPDATE for ${message.gameObjectId}: ${message.action} (${message.reason})`
-    );
-
     if (message.action === "remove") {
       // Remove the game object from the client world
       const gameObjectEntityId = this.remoteEntities.get(message.gameObjectId);
       if (gameObjectEntityId) {
-        console.log(
-          `[GAME_OBJECT_UPDATE] Removing game object ${message.gameObjectId} (${gameObjectEntityId}) from client world`
-        );
         this.world.destroyEntity(gameObjectEntityId);
         this.remoteEntities.delete(message.gameObjectId);
         this.clientToServerEntities.delete(gameObjectEntityId);
@@ -1063,27 +981,16 @@ export class NetworkSystem implements System {
       }
     } else if (message.action === "deactivate") {
       // Mark object as inactive (could hide it visually)
-      console.log(
-        `[GAME_OBJECT_UPDATE] Game object ${message.gameObjectId} deactivated (${message.reason})`
-      );
       // TODO: Implement deactivation (hide object, show depleted state, etc.)
     } else if (message.action === "activate") {
       // Reactivate object
-      console.log(
-        `[GAME_OBJECT_UPDATE] Game object ${message.gameObjectId} activated`
-      );
       // TODO: Implement reactivation (show object again)
     }
   }
 
   // Send a harvest request
   harvestObject(clientEntityId: string) {
-    console.log(
-      `[CLIENT HARVEST] Attempting to harvest object: ${clientEntityId}`
-    );
-
     if (!this.localPlayerId) {
-      console.log(`[CLIENT HARVEST] Cannot harvest - no local player ID`);
       return;
     }
 
@@ -1091,15 +998,8 @@ export class NetworkSystem implements System {
     const serverEntityId = this.clientToServerEntities.get(clientEntityId);
 
     if (!serverEntityId) {
-      console.log(
-        `[CLIENT HARVEST] Could not find server entity ID for client entity ${clientEntityId}`
-      );
       return;
     }
-
-    console.log(
-      `[CLIENT HARVEST] Found server entity ID: ${serverEntityId} for client entity ${clientEntityId}`
-    );
 
     const harvestMessage = {
       type: "HARVEST_OBJECT" as const,
@@ -1107,7 +1007,6 @@ export class NetworkSystem implements System {
       gameObjectId: serverEntityId,
     };
 
-    console.log(`[CLIENT HARVEST] Sending harvest message:`, harvestMessage);
     this.client.send(harvestMessage);
   }
 
@@ -1116,12 +1015,7 @@ export class NetworkSystem implements System {
     message: string,
     mode: "say" | "guild" | "party" | "global" = "say"
   ) {
-    console.log(`[CLIENT CHAT] Sending message: "${message}" (mode: ${mode})`);
-
     if (!this.localPlayerId || !message.trim()) {
-      console.log(
-        `[CLIENT CHAT] Cannot send - localPlayerId: ${this.localPlayerId}, message: "${message}"`
-      );
       return;
     }
 
@@ -1134,7 +1028,6 @@ export class NetworkSystem implements System {
       mode,
     };
 
-    console.log(`[CLIENT CHAT] Sending to server:`, chatMessage);
     this.client.send(chatMessage);
   }
 
@@ -1142,7 +1035,6 @@ export class NetworkSystem implements System {
     // Import the game store here to avoid circular imports
     import("../stores").then(({ useGameStore }) => {
       this.client.setDisconnectCallback(() => {
-        console.log("[NETWORK] Disconnected from server");
         const store = useGameStore.getState();
         store.setLoggedIn(false);
         store.setIsReconnecting(true);
