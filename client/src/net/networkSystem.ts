@@ -268,51 +268,43 @@ export class NetworkSystem implements System {
 
     // If we don't have a localPlayerId yet, this is our player
     if (!this.localPlayerId) {
-      console.log(`[NETWORK] This is our player join: ${playerId}`);
+      console.log(
+        `[NETWORK] This is our player join: ${playerId}, tempEntityId: ${this.tempLocalEntityId}`
+      );
       this.setServerPlayerId(playerId);
 
-      // Add or update position to match server
+      // Update position to match server
       if (this.tempLocalEntityId) {
-        // Check if position component already exists
-        let position = this.world.getComponent(
+        const position = this.world.getComponent(
           this.tempLocalEntityId,
           "position"
         );
 
-        if (!position) {
-          // Add position component
+        if (position) {
           console.log(
-            `[NETWORK] Adding position component at (${playerData.position.x}, ${playerData.position.y})`
-          );
-          position = {
-            type: "position",
-            x: playerData.position.x,
-            y: playerData.position.y,
-            z: playerData.position.z || 0,
-          };
-          this.world.addComponent(this.tempLocalEntityId, position);
-        } else {
-          // Update existing position
-          console.log(
-            `[NETWORK] Updating position from (${position.x}, ${position.y}) to (${playerData.position.x}, ${playerData.position.y})`
+            `[CLIENT] Updating local player position from (${position.x.toFixed(1)}, ${position.y.toFixed(1)}) to server position (${playerData.position.x.toFixed(1)}, ${playerData.position.y.toFixed(1)})`
           );
           position.x = playerData.position.x;
           position.y = playerData.position.y;
           position.z = playerData.position.z || 0;
-        }
 
-        console.log(`[NETWORK] Final position: (${position.x}, ${position.y})`);
+          console.log(
+            `[CLIENT] Position updated to: (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`
+          );
 
-        // Update the player store position
-        if (this.onPlayerPositionUpdate) {
-          this.onPlayerPositionUpdate({
-            x: position.x,
-            y: position.y,
-            z: position.z,
-          });
+          // Update the player store position
+          if (this.onPlayerPositionUpdate) {
+            this.onPlayerPositionUpdate({
+              x: position.x,
+              y: position.y,
+              z: position.z,
+            });
+          }
+        } else {
+          console.log(`[NETWORK] Position component not found on temp entity`);
         }
       } else {
-        console.log(`[NETWORK] No tempLocalEntityId to set position`);
+        console.log(`[NETWORK] No tempLocalEntityId to update position`);
       }
       return;
     }

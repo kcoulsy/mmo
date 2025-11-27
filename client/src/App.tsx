@@ -100,7 +100,12 @@ export function App() {
     const localPlayerEntityId = world.createEntity();
     const tempPlayerId = `temp_local_${Date.now()}`;
 
-    // Don't add position component yet - it will be added when we receive server position
+    world.addComponent(localPlayerEntityId, {
+      type: 'position',
+      x: 400, // Match server spawn position
+      y: 300,
+      z: 0,
+    });
     world.addComponent(localPlayerEntityId, {
       type: 'velocity',
       vx: 0,
@@ -153,7 +158,7 @@ export function App() {
         experience: 0,
         experienceToNext: 100,
       },
-      position: { x: 0, y: 0, z: 0 },
+      position: { x: 400, y: 300, z: 0 },
       isConnected: false,
       isLocal: true,
     });

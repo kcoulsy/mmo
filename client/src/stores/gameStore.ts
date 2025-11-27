@@ -123,3 +123,4 @@ export const useGameStore = create<GameStore>((set, get) => ({
   setMusicEnabled: (musicEnabled) => set({ musicEnabled }),
   setVolume: (volume) => set({ volume }),
 }));
+

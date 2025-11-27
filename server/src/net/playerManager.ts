@@ -64,11 +64,17 @@ export class PlayerManager {
     // Create ECS entity
     const entityId = this.world.createEntity();
 
-    // Add components
+    // Add components - fixed spawn position for now
+    const spawnX = 400;
+    const spawnY = 300;
+    console.log(
+      `[SERVER] Spawning player ${playerId} at fixed position (${spawnX}, ${spawnY})`
+    );
+
     const position: Position = {
       type: "position",
-      x: Math.random() * 800, // Random spawn position
-      y: Math.random() * 600,
+      x: spawnX,
+      y: spawnY,
       z: 0,
     };
 
