@@ -20,10 +20,13 @@ export const playerJoinHandler = registerHandler(
     console.log(`Received PLAYER_JOIN_REQUEST from ${client.id}`);
 
     try {
-      await playerManager.createPlayer(client, {
+      const player = await playerManager.createPlayer(client, {
         name: playerName,
         playerId: message.playerId,
       });
+
+      // Update the session with the player ID
+      session.playerId = player.id;
 
       const currentPlayers = playerManager.getAllPlayers();
       const currentEntities = world.gameObjectManager

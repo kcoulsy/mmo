@@ -1,5 +1,6 @@
 import { Position } from "../common/position";
 import { World } from "../../core/types";
+import { GameObjectUpdateMessage } from "@shared/messages";
 
 export interface GameObjectTemplate {
   id: string;
@@ -48,7 +49,7 @@ export class GameObjectManager {
       name: "Oak Tree",
       spriteId: "tree_oak",
       requiredSkill: "Woodcutting",
-      requiredLevel: 1,
+      // requiredLevel: 0, // Basic resources don't require skill levels
       respawnTime: 300, // 5 minutes
       maxHarvests: 10,
       lootTable: [
@@ -92,7 +93,7 @@ export class GameObjectManager {
       name: "Copper Vein",
       spriteId: "mining_copper",
       requiredSkill: "Mining",
-      requiredLevel: 1,
+      // requiredLevel: 0, // Basic resources don't require skill levels
       respawnTime: 480, // 8 minutes
       maxHarvests: 5,
       lootTable: [
@@ -127,7 +128,7 @@ export class GameObjectManager {
       name: "Peacebloom",
       spriteId: "herb_peacebloom",
       requiredSkill: "Herbalism",
-      requiredLevel: 1,
+      // requiredLevel: 0, // Basic resources don't require skill levels
       respawnTime: 240, // 4 minutes
       maxHarvests: 3,
       lootTable: [
@@ -175,19 +176,28 @@ export class GameObjectManager {
     };
 
     this.objects.set(objectId, gameObject);
-    console.log(`Spawned ${template.name} at (${x}, ${y})`);
+    console.log(
+      `[GAMEOBJECT] Spawned ${template.name} (${objectId}) at (${x}, ${y}) - isActive: ${gameObject.isActive}`
+    );
 
     return objectId;
   }
 
-  // Remove a game object
-  removeObject(objectId: string): boolean {
-    return this.objects.delete(objectId);
-  }
-
   // Get a game object by ID
   getObject(objectId: string): GameObject | undefined {
-    return this.objects.get(objectId);
+    const obj = this.objects.get(objectId);
+    console.log(
+      `[GAMEOBJECT] getObject(${objectId}) -> ${obj ? "found" : "not found"}`
+    );
+    if (obj) {
+      console.log(`[GAMEOBJECT] Object details:`, {
+        id: obj.id,
+        templateId: obj.templateId,
+        isActive: obj.isActive,
+        harvestCount: obj.harvestCount,
+      });
+    }
+    return obj;
   }
 
   // Get all active game objects
@@ -229,12 +239,12 @@ export class GameObjectManager {
     }
 
     // Check skill requirements
-    if (template.requiredLevel && playerSkillLevel < template.requiredLevel) {
-      return {
-        success: false,
-        reason: `Requires ${template.requiredSkill} level ${template.requiredLevel}`,
-      };
-    }
+    // if (template.requiredLevel && playerSkillLevel < template.requiredLevel) {
+    //   return {
+    //     success: false,
+    //     reason: `Requires ${template.requiredSkill} level ${template.requiredLevel}`,
+    //   };
+    // }
 
     // Check if object can still be harvested
     if (
@@ -274,12 +284,49 @@ export class GameObjectManager {
         );
       } else {
         // Permanently remove if no respawn time
-        this.objects.delete(objectId);
-        console.log(`${template.name} permanently depleted`);
+        this.removeObject(objectId, "harvested");
+        return { success: true, loot }; // Early return since object is removed
       }
     }
 
     return { success: true, loot };
+  }
+
+  // Remove a game object and notify nearby players
+  removeObject(objectId: string, reason?: string): boolean {
+    const gameObject = this.objects.get(objectId);
+    if (!gameObject) {
+      return false;
+    }
+
+    // Get the template for logging
+    const template = this.templates.get(gameObject.templateId);
+
+    // Remove the object from the world
+    this.objects.delete(objectId);
+
+    console.log(
+      `${template?.name || "Unknown object"} removed from world (${reason || "unknown reason"})`
+    );
+
+    // Notify nearby players about the object removal
+    const updateMessage: GameObjectUpdateMessage = {
+      type: "GAME_OBJECT_UPDATE",
+      timestamp: Date.now(),
+      gameObjectId: objectId,
+      action: "remove",
+      reason: reason,
+    };
+
+    // Broadcast to nearby players only
+    const notificationRange = 500; // pixels - adjust as needed
+    this.world.playerManager.broadcastToNearbyPosition(
+      gameObject.position,
+      updateMessage,
+      notificationRange
+    );
+
+    return true;
   }
 
   // Update game objects (handle respawning, etc.)

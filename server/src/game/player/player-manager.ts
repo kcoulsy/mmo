@@ -506,6 +506,26 @@ export class PlayerManager {
     }
   }
 
+  // Broadcast message to players near a specific position
+  broadcastToNearbyPosition(
+    position: { x: number; y: number },
+    message: any,
+    range: number = 200
+  ): void {
+    for (const player of this.players.values()) {
+      // Check distance from player to position
+      if (
+        MovementSystem.isWithinDistance(
+          player.position,
+          position,
+          range
+        )
+      ) {
+        this.world.sendToPlayer(player.id, message);
+      }
+    }
+  }
+
   // Get target information for an entity (player or game object)
   getTargetInfo(targetId: string): {
     name: string;

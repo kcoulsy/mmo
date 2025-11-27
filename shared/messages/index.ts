@@ -14,6 +14,7 @@ export type MessageType =
   | "TARGET_INFO"
   | "HARVEST_OBJECT"
   | "HARVEST_RESULT"
+  | "GAME_OBJECT_UPDATE"
   | "INVENTORY_UPDATE"
   | "PING"
   | "PONG";
@@ -173,6 +174,7 @@ export type Message =
   | TargetInfoMessage
   | HarvestObjectMessage
   | HarvestResultMessage
+  | GameObjectUpdateMessage
   | InventoryUpdateMessage
   | PingMessage
   | PongMessage;
@@ -190,6 +192,13 @@ export interface HarvestResultMessage extends NetworkMessage {
   reason?: string;
   xpGained?: number;
   itemsGained?: Array<{ itemId: string; quantity: number }>;
+}
+
+export interface GameObjectUpdateMessage extends NetworkMessage {
+  type: "GAME_OBJECT_UPDATE";
+  gameObjectId: string;
+  action: "remove" | "deactivate" | "activate";
+  reason?: string;
 }
 
 export interface InventoryUpdateMessage extends NetworkMessage {

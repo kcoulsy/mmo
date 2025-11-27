@@ -7,7 +7,6 @@ import {
   Velocity,
   Renderable,
   Stats,
-  GameObject,
 } from "@shared/ecs/components";
 import {
   PlayerJoinMessage,
@@ -17,11 +16,10 @@ import {
   PlayerUpdateMessage,
   WorldStateMessage,
   ChatMessage,
-  SetTargetMessage,
-  ClearTargetMessage,
   TargetInfoMessage,
   InventoryUpdateMessage,
   HarvestResultMessage,
+  GameObjectUpdateMessage,
 } from "@shared/messages";
 import { ITEM_TEMPLATES } from "@shared/items";
 import { GameClient } from "./client";
@@ -384,6 +382,14 @@ export class NetworkSystem implements System {
       "HARVEST_RESULT" as any,
       (message: HarvestResultMessage) => {
         this.handleHarvestResult(message);
+      }
+    );
+
+    // Handle game object updates (removal, deactivation, etc.)
+    this.client.onMessage(
+      "GAME_OBJECT_UPDATE" as any,
+      (message: GameObjectUpdateMessage) => {
+        this.handleGameObjectUpdate(message);
       }
     );
   }
@@ -763,10 +769,11 @@ export class NetworkSystem implements System {
       if (!entityId && entityData.id) {
         // Create new entity
         entityId = this.world.createEntity();
-        // entityData.id is guaranteed to be defined here due to the if condition above
-        const serverEntityId = entityData.id!;
-        this.remoteEntities.set(serverEntityId, entityId);
-        this.clientToServerEntities.set(entityId, serverEntityId);
+        const serverEntityId = entityData.id;
+        if (typeof serverEntityId === "string") {
+          this.remoteEntities.set(serverEntityId, entityId);
+          this.clientToServerEntities.set(entityId, serverEntityId);
+        }
 
         // Add all components from server
         for (const component of entityData.components) {
@@ -1031,6 +1038,41 @@ export class NetworkSystem implements System {
 
     if (message.xpGained && message.xpGained > 0) {
       console.log(`[HARVEST] Gained ${message.xpGained} XP`);
+    }
+  }
+
+  private handleGameObjectUpdate(message: GameObjectUpdateMessage) {
+    console.log(
+      `[NETWORK] Received GAME_OBJECT_UPDATE for ${message.gameObjectId}: ${message.action} (${message.reason})`
+    );
+
+    if (message.action === "remove") {
+      // Remove the game object from the client world
+      const gameObjectEntityId = this.remoteEntities.get(message.gameObjectId);
+      if (gameObjectEntityId) {
+        console.log(
+          `[GAME_OBJECT_UPDATE] Removing game object ${message.gameObjectId} (${gameObjectEntityId}) from client world`
+        );
+        this.world.destroyEntity(gameObjectEntityId);
+        this.remoteEntities.delete(message.gameObjectId);
+        this.clientToServerEntities.delete(gameObjectEntityId);
+      } else {
+        console.warn(
+          `[GAME_OBJECT_UPDATE] Could not find entity for game object ${message.gameObjectId}`
+        );
+      }
+    } else if (message.action === "deactivate") {
+      // Mark object as inactive (could hide it visually)
+      console.log(
+        `[GAME_OBJECT_UPDATE] Game object ${message.gameObjectId} deactivated (${message.reason})`
+      );
+      // TODO: Implement deactivation (hide object, show depleted state, etc.)
+    } else if (message.action === "activate") {
+      // Reactivate object
+      console.log(
+        `[GAME_OBJECT_UPDATE] Game object ${message.gameObjectId} activated`
+      );
+      // TODO: Implement reactivation (show object again)
     }
   }
 

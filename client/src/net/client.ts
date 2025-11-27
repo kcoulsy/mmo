@@ -37,7 +37,7 @@ export class GameClient {
       this.ws = new WebSocket(this.serverUrl);
 
       this.ws.onopen = () => {
-        console.log("Connected to server");
+        console.log("[CLIENT] Connected to server successfully");
         this.connectionState.connected = true;
         this.reconnectAttempts = 0;
         this.reconnectDelay = 1000;
@@ -85,7 +85,7 @@ export class GameClient {
       };
 
       this.ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
+        console.error("[CLIENT] WebSocket error:", error);
         reject(error);
       };
     });
@@ -103,12 +103,15 @@ export class GameClient {
 
   // Send a message to the server
   send(message: Message) {
+    console.log(`[CLIENT] Attempting to send message type: ${message.type}, WebSocket state: ${this.ws?.readyState}, connected: ${this.connectionState.connected}`);
     if (this.ws?.readyState === WebSocket.OPEN) {
       try {
         const data = pack(message);
+        console.log(`[CLIENT] Packed message, sending ${data.length} bytes`);
         this.ws.send(data);
+        console.log(`[CLIENT] Message sent successfully`);
       } catch (error) {
-        console.error("Error sending message:", error);
+        console.error("[CLIENT] Error sending message:", error);
         // Queue the message for later if connection is temporarily lost
         this.messageQueue.push(message);
       }

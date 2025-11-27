@@ -41,7 +41,7 @@ export class GameObjectManager {
       name: "Oak Tree",
       spriteId: "tree_oak",
       requiredSkill: "Woodcutting",
-      requiredLevel: 1,
+      // requiredLevel: 0, // Basic resources don't require skill levels
       respawnTime: 300, // 5 minutes
       maxHarvests: 10,
       collider: { shape: "circle", radius: 32 },
@@ -78,7 +78,7 @@ export class GameObjectManager {
       name: "Copper Vein",
       spriteId: "mining_copper",
       requiredSkill: "Mining",
-      requiredLevel: 1,
+      // requiredLevel: 0, // Basic resources don't require skill levels
       respawnTime: 480, // 8 minutes
       maxHarvests: 5,
       collider: { shape: "circle", radius: 24 },
@@ -103,7 +103,7 @@ export class GameObjectManager {
       name: "Peacebloom",
       spriteId: "herb_peacebloom",
       requiredSkill: "Herbalism",
-      requiredLevel: 1,
+      // requiredLevel: 0, // Basic resources don't require skill levels
       respawnTime: 240, // 4 minutes
       maxHarvests: 3,
       collider: { shape: "circle", radius: 16 },

@@ -26,12 +26,10 @@ export class InputSystem implements System {
   private mousemoveHandler: (e: MouseEvent) => void;
 
   constructor(canvas: HTMLCanvasElement) {
-    console.log("[INPUT] InputSystem created");
     this.canvas = canvas;
 
     // Create event handlers
     this.keydownHandler = (e) => {
-      console.log("[INPUT] Key down:", e.code);
       this.keys.add(e.code);
 
       // Handle keybind actions (prevent default if handled)
@@ -42,7 +40,6 @@ export class InputSystem implements System {
     };
 
     this.keyupHandler = (e) => {
-      console.log("[INPUT] Key up:", e.code);
       this.keys.delete(e.code);
     };
 
@@ -119,15 +116,6 @@ export class InputSystem implements System {
       left: this.keys.has("KeyA") || this.keys.has("ArrowLeft"),
       right: this.keys.has("KeyD") || this.keys.has("ArrowRight"),
     };
-
-    if (
-      inputState.up ||
-      inputState.down ||
-      inputState.left ||
-      inputState.right
-    ) {
-      console.log("[INPUT] Movement input detected:", inputState);
-    }
 
     // Send input state to network system
     if (this.networkSystem) {
@@ -217,16 +205,12 @@ export class InputSystem implements System {
 
     const { x: clickX, y: clickY } = this.pendingClick;
 
-    console.log(`[INPUT] Processing click, ${entities.size} entities in world`);
-
     // Get camera position from render system
     const cameraPos = this.renderSystem?.getCameraPosition() || { x: 0, y: 0 };
 
     // Convert screen coordinates to world coordinates
     const worldX = clickX + cameraPos.x;
     const worldY = clickY + cameraPos.y;
-
-    console.log(`[INPUT] Camera at (${cameraPos.x}, ${cameraPos.y})`);
 
     // Find entities that were clicked on
     let clickedEntity: EntityId | undefined;
@@ -250,30 +234,18 @@ export class InputSystem implements System {
         ) {
           clickedEntity = entityId;
           clickedPlayerId = player?.id;
-          console.log(
-            `[INPUT] Clicked entity ${entityId} at (${position.x}, ${position.y}) - Player: ${player?.name || "NPC"} (ID: ${clickedPlayerId})`
-          );
           break;
         }
       }
     }
-
-    console.log(
-      `[INPUT] Click at screen (${clickX}, ${clickY}) -> world (${worldX}, ${worldY}), found ${foundEntities} entities, clicked: ${clickedEntity || "none"}`
-    );
-
     // Send targeting request to server
     if (clickedEntity) {
       // For players, use player ID; for NPCs, use entity ID
       const targetId = clickedPlayerId || clickedEntity;
       this.networkSystem.setTarget(targetId);
-      console.log(
-        `[INPUT] Targeting ${clickedPlayerId ? "player" : "entity"}: ${targetId}`
-      );
     } else {
       // Clicked on empty space - clear target
       this.networkSystem.clearTarget();
-      console.log(`[INPUT] Clearing target (clicked empty space)`);
     }
 
     // Clear pending click
@@ -363,30 +335,13 @@ export class InputSystem implements System {
     const uiStore = useUIStore.getState();
     const actionId = keybindStore.getActionForKey(keyCode);
 
-    console.log(
-      "[INPUT] Keybind check for",
-      keyCode,
-      "- actionId:",
-      actionId,
-      "- mappings:",
-      keybindStore.mappings
-    );
-
     if (!actionId) return false;
-
-    console.log("[INPUT] Keybind action triggered:", actionId);
 
     switch (actionId) {
       case "toggle_game_menu":
-        console.log(
-          "[INPUT] Toggling game menu - callback exists:",
-          !!this.onToggleGameMenu
-        );
         if (this.onToggleGameMenu) {
-          console.log("[INPUT] Calling onToggleGameMenu callback");
           this.onToggleGameMenu();
         } else {
-          console.log("[INPUT] No callback, using fallback to store");
           // Fallback to store
           keybindStore.toggleGameMenu();
         }
@@ -415,7 +370,6 @@ export class InputSystem implements System {
 
   // Clean up event listeners
   cleanup(): void {
-    console.log("[INPUT] Cleaning up InputSystem event listeners");
     window.removeEventListener("keydown", this.keydownHandler);
     window.removeEventListener("keyup", this.keyupHandler);
     this.canvas.removeEventListener("mousedown", this.mousedownHandler);
