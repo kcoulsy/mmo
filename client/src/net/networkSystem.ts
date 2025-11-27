@@ -7,6 +7,7 @@ import {
   Velocity,
   Renderable,
   Stats,
+  GameObject,
 } from "@shared/ecs/components";
 import {
   PlayerJoinMessage,
@@ -16,11 +17,15 @@ import {
   PlayerUpdateMessage,
   WorldStateMessage,
   ChatMessage,
+  SetTargetMessage,
+  ClearTargetMessage,
+  TargetInfoMessage,
 } from "@shared/messages";
 import { GameClient } from "./client";
 
 export class NetworkSystem implements System {
   private remotePlayers: Map<string, EntityId> = new Map(); // playerId -> entityId
+  private remoteEntities: Map<string, EntityId> = new Map(); // entityId -> entityId
   private localPlayerId?: string;
   private tempLocalEntityId?: EntityId; // Temporary entity ID before server assigns player ID
   private onPlayerPositionUpdate?: (position: {
@@ -38,6 +43,17 @@ export class NetworkSystem implements System {
       isLocal: boolean;
     }>
   ) => void;
+  private onTargetUpdate?: (target: {
+    entityId: string;
+    info: {
+      name: string;
+      type: "player" | "npc" | "monster";
+      level?: number;
+      hp?: number;
+      maxHp?: number;
+      position: { x: number; y: number; z?: number };
+    } | null;
+  }) => void;
   private lastInputTime = 0;
   private inputSendInterval = 50; // Send input every 50ms (20Hz) when active
   private idleInputSendInterval = 1000; // Send input every 1s when idle
@@ -210,6 +226,52 @@ export class NetworkSystem implements System {
     this.onPlayerUpdate = callback;
   }
 
+  // Set callback for target updates
+  setTargetUpdateCallback(
+    callback: (target: {
+      entityId: string;
+      info: {
+        name: string;
+        type: "player" | "npc" | "monster";
+        level?: number;
+        hp?: number;
+        maxHp?: number;
+        position: { x: number; y: number; z?: number };
+      } | null;
+    }) => void
+  ) {
+    this.onTargetUpdate = callback;
+  }
+
+  // Set target entity
+  setTarget(targetEntityId: string) {
+    if (!this.localPlayerId) return;
+
+    console.log(`[NETWORK] Sending SET_TARGET for entity: ${targetEntityId}`);
+
+    // Send target request to server
+    this.client.send({
+      type: "SET_TARGET" as any,
+      timestamp: Date.now(),
+      playerId: this.localPlayerId,
+      targetEntityId,
+    });
+  }
+
+  // Clear current target
+  clearTarget() {
+    if (!this.localPlayerId) return;
+
+    console.log(`[NETWORK] Sending CLEAR_TARGET`);
+
+    // Send clear target request to server
+    this.client.send({
+      type: "CLEAR_TARGET" as any,
+      timestamp: Date.now(),
+      playerId: this.localPlayerId,
+    });
+  }
+
   // Set the server-assigned player ID and update the temp entity
   setServerPlayerId(playerId: string) {
     console.log(`[NETWORK] Setting server player ID: ${playerId}`);
@@ -283,6 +345,14 @@ export class NetworkSystem implements System {
     this.client.onMessage("CHAT_MESSAGE", (message: ChatMessage) => {
       this.handleChatMessage(message);
     });
+
+    // Handle target info
+    this.client.onMessage(
+      "TARGET_INFO" as any,
+      (message: TargetInfoMessage) => {
+        this.handleTargetInfo(message);
+      }
+    );
   }
 
   private handlePlayerJoin(message: PlayerJoinMessage) {
@@ -622,6 +692,48 @@ export class NetworkSystem implements System {
         }
       }
     }
+
+    // Sync all entities from server state (including GameObjects)
+    for (const entityData of message.entities || []) {
+      // Skip player entities (already handled above)
+      const hasPlayerComponent = entityData.components.some(
+        (c: any) => c.type === "player"
+      );
+      if (hasPlayerComponent) continue;
+
+      let entityId = entityData.id
+        ? this.remoteEntities.get(entityData.id)
+        : undefined;
+
+      if (!entityId && entityData.id) {
+        // Create new entity
+        entityId = this.world.createEntity();
+        this.remoteEntities.set(entityData.id!, entityId);
+
+        // Add all components from server
+        for (const component of entityData.components) {
+          this.world.addComponent(entityId, component);
+        }
+
+        console.log(
+          `Created entity ${entityData.id || "unknown"} (${entityId}) from world state`
+        );
+      } else {
+        // Update existing entity components
+        for (const component of entityData.components) {
+          const existingComponent = this.world.getComponent(
+            entityId,
+            component.type
+          );
+          if (!existingComponent) {
+            this.world.addComponent(entityId, component);
+          } else {
+            // Update component properties (simple shallow merge for now)
+            Object.assign(existingComponent, component);
+          }
+        }
+      }
+    }
   }
 
   private createRemotePlayerFromWorldState(playerData: {
@@ -702,6 +814,13 @@ export class NetworkSystem implements System {
       }
     }
     this.remotePlayers.clear();
+
+    // Clean up remote entities
+    for (const [entityServerId, entityId] of this.remoteEntities) {
+      this.world.destroyEntity(entityId);
+    }
+    this.remoteEntities.clear();
+
     this.localPlayerId = undefined;
   }
 
@@ -742,6 +861,23 @@ export class NetworkSystem implements System {
       this.onChatMessage(message);
     } else {
       console.log(`[NETWORK] No chat message callback set!`);
+    }
+  }
+
+  private handleTargetInfo(message: TargetInfoMessage) {
+    console.log(
+      `[NETWORK] Received TARGET_INFO for ${message.targetEntityId}: "${message.targetInfo.name}"`
+    );
+
+    // Call the target update callback if set
+    if (this.onTargetUpdate) {
+      console.log(`[NETWORK] Calling onTargetUpdate callback`);
+      this.onTargetUpdate({
+        entityId: message.targetEntityId,
+        info: message.targetInfo,
+      });
+    } else {
+      console.log(`[NETWORK] No onTargetUpdate callback set!`);
     }
   }
 

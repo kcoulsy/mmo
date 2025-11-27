@@ -89,6 +89,22 @@ export interface Player {
   connectionId?: string // WebSocket connection ID (server-side)
 }
 
+export interface GameObject {
+  readonly type: 'gameObject'
+  objectType: 'tree' | 'mining_node' | 'herb' | 'chest' | 'door' | string
+  subtype?: string // e.g., 'oak', 'copper', 'peacebloom', etc.
+  name: string
+  interactable: boolean
+  harvestable?: boolean
+  requiredSkill?: string // e.g., 'Woodcutting', 'Mining', 'Herbalism'
+  requiredLevel?: number
+  respawnTime?: number // in seconds, undefined = no respawn
+  lastHarvested?: number // timestamp
+  maxHarvests?: number // how many times it can be harvested before depletion
+  currentHarvests?: number
+  properties?: Record<string, any> // generic properties for extensibility
+}
+
 // Supporting types
 export interface ItemStack {
   itemId: string
@@ -116,3 +132,4 @@ export type Component =
   | Lootable
   | NavAgent
   | Player
+  | GameObject

@@ -130,14 +130,7 @@ export class PlayerManager {
         stats: {
           hp: stats.hp,
           maxHp: stats.maxHp,
-          mp: stats.mp,
-          maxMp: stats.maxMp,
-          attack: stats.attack,
-          defense: stats.defense,
-          moveSpeed: stats.moveSpeed,
           level: 1, // TODO: Get from player data
-          experience: 0,
-          experienceToNext: 100,
         },
       },
     };
@@ -493,5 +486,104 @@ export class PlayerManager {
     console.log(
       `Player ${chatMessage.playerId} ${chatMessage.mode}: "${chatMessage.message}"`
     );
+  }
+
+  // Get target information for an entity
+  getTargetInfo(targetId: string): {
+    name: string;
+    type: "player" | "npc" | "monster";
+    level?: number;
+    hp?: number;
+    maxHp?: number;
+    position: { x: number; y: number; z?: number };
+  } | null {
+    console.log(`[SERVER] getTargetInfo called for: ${targetId}`);
+    console.log(
+      `[SERVER] Current playerEntities:`,
+      Array.from(this.playerEntities.entries())
+    );
+
+    // First check if it's a player ID (direct lookup)
+    if (this.playerEntities.has(targetId)) {
+      const entityId = this.playerEntities.get(targetId)!;
+      console.log(`[SERVER] Found player ${targetId} with entity ${entityId}`);
+
+      const player = this.world.getComponent(entityId, "player") as Player;
+      const position = this.world.getComponent(
+        entityId,
+        "position"
+      ) as Position;
+      const stats = this.world.getComponent(entityId, "stats") as Stats;
+
+      if (player && position && stats) {
+        console.log(
+          `[SERVER] getTargetInfo for player ${targetId}: name="${player.name}", type="player"`
+        );
+        return {
+          name: player.name,
+          type: "player",
+          level: 1, // TODO: Get actual level from stats
+          hp: stats.hp,
+          maxHp: stats.maxHp,
+          position: { x: position.x, y: position.y, z: position.z },
+        };
+      }
+    }
+
+    // If not a player ID, check if it's an entity ID
+    for (const [playerId, entityId] of this.playerEntities) {
+      console.log(
+        `[SERVER] Checking if ${targetId} matches entity ${entityId} for player ${playerId}`
+      );
+      if (entityId === targetId) {
+        const player = this.world.getComponent(entityId, "player") as Player;
+        const position = this.world.getComponent(
+          entityId,
+          "position"
+        ) as Position;
+        const stats = this.world.getComponent(entityId, "stats") as Stats;
+
+        console.log(
+          `[SERVER] Found matching entity! Player:`,
+          player,
+          `Position:`,
+          position,
+          `Stats:`,
+          stats
+        );
+
+        if (player && position && stats) {
+          console.log(
+            `[SERVER] getTargetInfo for player ${playerId}: name="${player.name}", type="player"`
+          );
+          return {
+            name: player.name,
+            type: "player",
+            level: 1, // TODO: Get actual level from stats
+            hp: stats.hp,
+            maxHp: stats.maxHp,
+            position: { x: position.x, y: position.y, z: position.z },
+          };
+        }
+      }
+    }
+
+    // Check if it's an NPC (like the test NPC created in index.ts)
+    const position = this.world.getComponent(targetId, "position") as Position;
+    const npc = this.world.getComponent(targetId, "npc"); // Assuming NPCs have an 'npc' component
+
+    if (position && npc) {
+      return {
+        name: npc.name || "NPC",
+        type: "npc",
+        level: 1,
+        hp: 100, // Default NPC health
+        maxHp: 100,
+        position: { x: position.x, y: position.y, z: position.z },
+      };
+    }
+
+    // Entity not found
+    return null;
   }
 }

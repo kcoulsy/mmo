@@ -1,5 +1,12 @@
 // Client Input System
-import { System, EntityId, Entity, Velocity } from "@shared/ecs";
+import {
+  System,
+  EntityId,
+  Entity,
+  Velocity,
+  Position,
+  Renderable,
+} from "@shared/ecs";
 
 export class InputSystem implements System {
   private keys: Set<string> = new Set();
@@ -21,6 +28,9 @@ export class InputSystem implements System {
       this.mouseButtons.delete(e.button);
       this.updateMousePosition(e, canvas);
     });
+    canvas.addEventListener("click", (e) => {
+      this.handleClick(e, canvas);
+    });
     canvas.addEventListener("mousemove", (e) => {
       this.updateMousePosition(e, canvas);
     });
@@ -32,6 +42,9 @@ export class InputSystem implements System {
   }
 
   update(entities: Map<EntityId, Entity>, _deltaTime: number): void {
+    // Handle mouse clicks for targeting
+    this.handleMouseClicks(entities);
+
     // Calculate current input state
     const inputState = {
       up: this.keys.has("KeyW") || this.keys.has("ArrowUp"),
@@ -95,5 +108,90 @@ export class InputSystem implements System {
 
   isMouseButtonPressed(button: number): boolean {
     return this.mouseButtons.has(button);
+  }
+
+  private handleClick(event: MouseEvent, canvas: HTMLCanvasElement): void {
+    // Only handle left mouse button clicks
+    if (event.button !== 0) return;
+
+    // Get click position in canvas coordinates
+    const rect = canvas.getBoundingClientRect();
+    const clickX = event.clientX - rect.left;
+    const clickY = event.clientY - rect.top;
+
+    // Store the click for processing in the update loop
+    this.pendingClick = { x: clickX, y: clickY };
+  }
+
+  private pendingClick?: { x: number; y: number };
+
+  private handleMouseClicks(entities: Map<EntityId, Entity>): void {
+    if (!this.pendingClick || !this.networkSystem) return;
+
+    const { x: clickX, y: clickY } = this.pendingClick;
+
+    console.log(`[INPUT] Processing click, ${entities.size} entities in world`);
+
+    // Find entity at click position (accounting for camera position from render system)
+    // For now, we'll need to get camera position - this is a bit hacky but works
+    const cameraX = (this.networkSystem as any).cameraX || 0;
+    const cameraY = (this.networkSystem as any).cameraY || 0;
+
+    // Convert screen coordinates to world coordinates
+    const worldX = clickX + cameraX;
+    const worldY = clickY + cameraY;
+
+    console.log(`[INPUT] Camera at (${cameraX}, ${cameraY})`);
+
+    // Find entities that were clicked on
+    let clickedEntity: EntityId | undefined;
+    let clickedPlayerId: string | undefined;
+    let foundEntities = 0;
+
+    for (const [entityId, entity] of entities) {
+      const position = entity.components.get("position") as Position;
+      const renderable = entity.components.get("renderable") as Renderable;
+      const player = entity.components.get("player") as any;
+
+      if (position && renderable) {
+        foundEntities++;
+        // Check if click is within entity bounds (32x32 centered on position)
+        const halfSize = 16;
+        if (
+          worldX >= position.x - halfSize &&
+          worldX <= position.x + halfSize &&
+          worldY >= position.y - halfSize &&
+          worldY <= position.y + halfSize
+        ) {
+          clickedEntity = entityId;
+          clickedPlayerId = player?.id;
+          console.log(
+            `[INPUT] Clicked entity ${entityId} at (${position.x}, ${position.y}) - Player: ${player?.name || "NPC"} (ID: ${clickedPlayerId})`
+          );
+          break;
+        }
+      }
+    }
+
+    console.log(
+      `[INPUT] Click at screen (${clickX}, ${clickY}) -> world (${worldX}, ${worldY}), found ${foundEntities} entities, clicked: ${clickedEntity || "none"}`
+    );
+
+    // Send targeting request to server
+    if (clickedEntity) {
+      // For players, use player ID; for NPCs, use entity ID
+      const targetId = clickedPlayerId || clickedEntity;
+      this.networkSystem.setTarget(targetId);
+      console.log(
+        `[INPUT] Targeting ${clickedPlayerId ? "player" : "entity"}: ${targetId}`
+      );
+    } else {
+      // Clicked on empty space - clear target
+      this.networkSystem.clearTarget();
+      console.log(`[INPUT] Clearing target (clicked empty space)`);
+    }
+
+    // Clear pending click
+    this.pendingClick = undefined;
   }
 }

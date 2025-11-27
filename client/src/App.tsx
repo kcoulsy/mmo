@@ -11,6 +11,7 @@ import { NetworkSystem } from './net/networkSystem';
 import { InterpolationSystem } from './net/interpolation';
 import { PlayerJoinRequestMessage } from '../../shared/messages/index';
 import { useGameStore, usePlayerStore, useChatStore, useChatBubbleStore } from './stores';
+import { TargetInfo } from './stores/playerStore';
 
 import { UIInterface } from "./ui/ui-interface"
 
@@ -20,7 +21,7 @@ export function App() {
   const networkSystemRef = useRef<any>(null);
 
   const { setConnected, setConnectionStatus, updateFPS } = useGameStore();
-  const { setPlayer } = usePlayerStore();
+  const { setPlayer, setTarget, clearTarget } = usePlayerStore();
   const { addMessage } = useChatStore();
   const { addBubble, cleanupExpiredBubbles, updateBubblePosition } = useChatBubbleStore();
 
@@ -145,6 +146,21 @@ export function App() {
     // Set callback to update player store with server data
     networkSystem.setPlayerUpdateCallback((playerData) => {
       setPlayer(playerData);
+    });
+
+    // Set callback to update target information
+    networkSystem.setTargetUpdateCallback((targetData) => {
+      console.log(`[APP] Target update:`, targetData);
+      if (targetData.info && targetData.info.name) {
+        console.log(`[APP] Setting target to: ${targetData.info.name}`);
+        setTarget({
+          entityId: targetData.entityId,
+          ...targetData.info,
+        });
+      } else {
+        console.log(`[APP] Clearing target`);
+        clearTarget();
+      }
     });
 
     // Update player store with initial data (will be updated with server data later)

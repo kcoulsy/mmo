@@ -9,6 +9,11 @@ export type MessageType =
   | "PLAYER_UPDATE"
   | "WORLD_STATE"
   | "CHAT_MESSAGE"
+  | "SET_TARGET"
+  | "CLEAR_TARGET"
+  | "TARGET_INFO"
+  | "HARVEST_OBJECT"
+  | "HARVEST_RESULT"
   | "PING"
   | "PONG";
 
@@ -82,6 +87,30 @@ export interface PlayerUpdateMessage extends NetworkMessage {
   }>;
 }
 
+export interface SetTargetMessage extends NetworkMessage {
+  type: "SET_TARGET";
+  playerId: string;
+  targetEntityId: string;
+}
+
+export interface ClearTargetMessage extends NetworkMessage {
+  type: "CLEAR_TARGET";
+  playerId: string;
+}
+
+export interface TargetInfoMessage extends NetworkMessage {
+  type: "TARGET_INFO";
+  targetEntityId: string;
+  targetInfo: {
+    name: string;
+    type: 'player' | 'npc' | 'monster';
+    level?: number;
+    hp?: number;
+    maxHp?: number;
+    position: { x: number; y: number; z?: number };
+  };
+}
+
 // World state synchronization
 export interface WorldStateMessage extends NetworkMessage {
   type: "WORLD_STATE";
@@ -96,6 +125,10 @@ export interface WorldStateMessage extends NetworkMessage {
     };
     spriteId?: string;
     frame?: number;
+  }>;
+  entities: Array<{
+    id: string;
+    components: any[]; // Generic components array
   }>;
 }
 
@@ -133,8 +166,28 @@ export type Message =
   | PlayerUpdateMessage
   | WorldStateMessage
   | ChatMessage
+  | SetTargetMessage
+  | ClearTargetMessage
+  | TargetInfoMessage
+  | HarvestObjectMessage
+  | HarvestResultMessage
   | PingMessage
   | PongMessage;
+
+// Tradeskill messages
+export interface HarvestObjectMessage extends NetworkMessage {
+  type: "HARVEST_OBJECT";
+  gameObjectId: string;
+}
+
+export interface HarvestResultMessage extends NetworkMessage {
+  type: "HARVEST_RESULT";
+  gameObjectId: string;
+  success: boolean;
+  reason?: string;
+  xpGained?: number;
+  itemsGained?: Array<{ itemId: string; quantity: number }>;
+}
 
 // Message handler type for processing incoming messages
 export type MessageHandler<T extends Message> = (message: T) => void;

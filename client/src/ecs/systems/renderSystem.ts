@@ -6,6 +6,7 @@ import {
   Position,
   Renderable,
   Player,
+  GameObject,
 } from "@shared/ecs";
 
 export class RenderSystem implements System {
@@ -44,8 +45,11 @@ export class RenderSystem implements System {
       const position = entity.components.get("position") as Position;
       const renderable = entity.components.get("renderable") as Renderable;
       const player = entity.components.get("player") as Player | undefined;
+      const gameObject = entity.components.get("gameObject") as
+        | GameObject
+        | undefined;
 
-      this.renderEntity(position, renderable, player);
+      this.renderEntity(position, renderable, player, gameObject);
     }
   }
 
@@ -155,7 +159,8 @@ export class RenderSystem implements System {
   private renderEntity(
     position: Position,
     renderable: Renderable,
-    player?: Player
+    player?: Player,
+    gameObject?: GameObject
   ): void {
     this.ctx.save();
 
@@ -171,19 +176,36 @@ export class RenderSystem implements System {
 
     // TODO: Implement actual sprite rendering
     // For now, draw a placeholder rectangle
-    this.ctx.fillStyle = "#ff0000";
-    this.ctx.fillRect(-16, -16, 32, 32);
+    if (gameObject) {
+      // GameObjects: green boxes
+      this.ctx.fillStyle = "#00ff00";
+      this.ctx.strokeStyle = "#008800";
+      this.ctx.lineWidth = 2;
+      this.ctx.strokeRect(-20, -20, 40, 40);
+      this.ctx.fillRect(-20, -20, 40, 40);
+    } else {
+      // Players: red boxes
+      this.ctx.fillStyle = "#ff0000";
+      this.ctx.fillRect(-16, -16, 32, 32);
+    }
 
-    // Draw player name/ID above the character
-    if (player) {
+    // Draw name above the entity
+    if (player || gameObject) {
       this.ctx.fillStyle = "#ffffff";
       this.ctx.strokeStyle = "#000000";
       this.ctx.lineWidth = 2;
       this.ctx.font = "12px Arial";
       this.ctx.textAlign = "center";
 
-      // Display player name (fallback to ID if name not available)
-      const displayName = (player.name || player.id).substring(0, 8);
+      let displayName = "";
+      if (player) {
+        // Display player name (fallback to ID if name not available)
+        displayName = (player.name || player.id).substring(0, 8);
+      } else if (gameObject) {
+        // Display GameObject name
+        displayName = gameObject.name.substring(0, 12);
+      }
+
       this.ctx.strokeText(displayName, 0, -25);
       this.ctx.fillText(displayName, 0, -25);
     }

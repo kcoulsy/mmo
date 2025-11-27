@@ -4,12 +4,18 @@ import { DatabaseService } from "./db";
 import { CombatSystem } from "./systems/CombatSystem";
 import { MovementSystem } from "./systems/MovementSystem";
 import { TradeskillSystem } from "./systems/TradeskillSystem";
+import { GameObjectSpawner } from "./world/spawners/GameObjectSpawner";
 import { WebSocketServer } from "./net/websocketServer";
 import { PlayerManager } from "./net/playerManager";
 import { BroadcastSystem } from "./systems/BroadcastSystem";
 import {
   PlayerJoinRequestMessage,
   WorldStateMessage,
+  SetTargetMessage,
+  ClearTargetMessage,
+  TargetInfoMessage,
+  HarvestObjectMessage,
+  HarvestResultMessage,
 } from "../../shared/messages/index";
 
 async function main() {
@@ -20,6 +26,11 @@ async function main() {
 
   // Initialize ECS world
   const world = new ServerWorld();
+
+  // Initialize GameObject spawner and spawn world objects
+  const gameObjectSpawner = new GameObjectSpawner(world);
+  const worldSize = { width: 2000, height: 2000 }; // Define world bounds
+  gameObjectSpawner.spawnWorldObjects(worldSize);
 
   // Initialize WebSocket server
   const wsServer = new WebSocketServer(8080);
@@ -53,21 +64,108 @@ async function main() {
         `Player ${message.playerName} joined from client ${client.id}`
       );
 
-      // Send current world state to the new player so they see existing players
+      // Send current world state to the new player so they see existing players and entities
       const currentPlayers = playerManager.getAllPlayers();
+      const currentEntities = world.getEntitiesForSync();
       const worldStateMessage: WorldStateMessage = {
         type: "WORLD_STATE",
         timestamp: Date.now(),
         players: currentPlayers,
+        entities: currentEntities,
       };
       wsServer.sendToClient(client, worldStateMessage);
     }
   );
 
-  // Add systems
+  // Handle target setting
+  wsServer.onMessage(
+    "SET_TARGET" as any,
+    (client, message: SetTargetMessage) => {
+      if (!client.playerId) return;
+
+      console.log(
+        `Player ${client.playerId} targeting entity ${message.targetEntityId}`
+      );
+
+      // Get target information
+      const targetInfo = playerManager.getTargetInfo(message.targetEntityId);
+      console.log(`Target info result:`, targetInfo);
+      if (targetInfo) {
+        const targetMessage: TargetInfoMessage = {
+          type: "TARGET_INFO" as any,
+          timestamp: Date.now(),
+          targetEntityId: message.targetEntityId,
+          targetInfo,
+        };
+        console.log(`Sending target info:`, targetMessage);
+        wsServer.sendToClient(client, targetMessage);
+      } else {
+        console.log(
+          `No target info found for entity ${message.targetEntityId}`
+        );
+      }
+    }
+  );
+
+  // Handle target clearing
+  wsServer.onMessage(
+    "CLEAR_TARGET" as any,
+    (client, message: ClearTargetMessage) => {
+      if (!client.playerId) return;
+
+      console.log(`[SERVER] Player ${client.playerId} clearing target`);
+
+      // Send empty target info to clear the UI
+      const clearTargetMessage: TargetInfoMessage = {
+        type: "TARGET_INFO",
+        timestamp: Date.now(),
+        targetEntityId: "",
+        targetInfo: {
+          name: "",
+          type: "player",
+          position: { x: 0, y: 0, z: 0 },
+        },
+      };
+      console.log(`[SERVER] Sending clear target message:`, clearTargetMessage);
+      wsServer.sendToClient(client, clearTargetMessage);
+    }
+  );
+
+  // Handle object harvesting
+  wsServer.onMessage(
+    "HARVEST_OBJECT" as any,
+    (client, message: HarvestObjectMessage) => {
+      if (!client.playerId) return;
+
+      console.log(
+        `Player ${client.playerId} attempting to harvest ${message.gameObjectId}`
+      );
+
+      const result = tradeskillSystem.harvest(
+        client.playerId,
+        message.gameObjectId
+      );
+
+      const harvestResultMessage: HarvestResultMessage = {
+        type: "HARVEST_RESULT",
+        timestamp: Date.now(),
+        gameObjectId: message.gameObjectId,
+        success: result.success,
+        reason: result.reason,
+        xpGained: result.xpGained,
+      };
+
+      wsServer.sendToClient(client, harvestResultMessage);
+    }
+  );
+
+  // Initialize and add systems
+  const tradeskillSystem = new TradeskillSystem();
+  tradeskillSystem.setWorld(world);
+
   world.addSystem(new CombatSystem());
   world.addSystem(new MovementSystem(playerManager));
-  world.addSystem(new TradeskillSystem());
+  world.addSystem(tradeskillSystem);
   world.addSystem(new BroadcastSystem(wsServer, playerManager));
 
   // Create a test NPC entity
