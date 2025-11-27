@@ -16,6 +16,10 @@ export type MessageType =
   | "HARVEST_RESULT"
   | "GAME_OBJECT_UPDATE"
   | "INVENTORY_UPDATE"
+  | "SPELLBOOK_UPDATE"
+  | "CAST_SPELL"
+  | "SPELL_CAST_RESULT"
+  | "SPELL_EFFECT"
   | "PING"
   | "PONG";
 
@@ -176,6 +180,10 @@ export type Message =
   | HarvestResultMessage
   | GameObjectUpdateMessage
   | InventoryUpdateMessage
+  | SpellbookUpdateMessage
+  | CastSpellMessage
+  | SpellCastResultMessage
+  | SpellEffectMessage
   | PingMessage
   | PongMessage;
 
@@ -212,6 +220,47 @@ export interface InventoryUpdateMessage extends NetworkMessage {
     } | null>;
     maxSlots: number;
   };
+}
+
+// Spell system messages
+export interface SpellbookUpdateMessage extends NetworkMessage {
+  type: "SPELLBOOK_UPDATE";
+  playerId: string;
+  spells: Array<{
+    spellId: string;
+    level: number;
+    cooldownUntil?: number;
+  }>;
+}
+
+export interface CastSpellMessage extends NetworkMessage {
+  type: "CAST_SPELL";
+  spellId: string;
+  targetEntityId?: string;
+  targetPosition?: { x: number; y: number; z?: number };
+}
+
+export interface SpellCastResultMessage extends NetworkMessage {
+  type: "SPELL_CAST_RESULT";
+  spellId: string;
+  success: boolean;
+  reason?: string;
+  cooldownRemaining?: number;
+}
+
+export interface SpellEffectMessage extends NetworkMessage {
+  type: "SPELL_EFFECT";
+  spellId: string;
+  casterId: string;
+  targetEntityId?: string;
+  targetPosition?: { x: number; y: number; z?: number };
+  effects: Array<{
+    type: "damage" | "heal" | "buff" | "debuff" | "teleport";
+    targetEntityId: string;
+    amount?: number;
+    buffType?: string;
+    duration?: number;
+  }>;
 }
 
 // Message handler type for processing incoming messages

@@ -1,6 +1,6 @@
 // Spell Manager - handles spell lookups, cooldowns, and player spellbooks
 
-import { PlayerSpell, SpellTemplate } from "@shared/spells";
+import { PlayerSpell, SpellTemplate, getSpellTemplate, SPELL_TEMPLATES } from "@shared/spells";
 
 export class SpellManager {
   // Track player spellbooks: playerId -> spellId -> PlayerSpell
@@ -23,7 +23,7 @@ export class SpellManager {
 
   // Learn a spell
   learnSpell(playerId: string, spellId: string): boolean {
-    const template = getSpellTemplate(spellId);
+    const template = getSpellTemplate(spellId, SPELL_TEMPLATES);
     if (!template) {
       console.error(`Cannot learn unknown spell: ${spellId}`);
       return false;
@@ -89,7 +89,7 @@ export class SpellManager {
   // Start cooldown for a spell
   startCooldown(playerId: string, spellId: string): void {
     const playerSpell = this.getPlayerSpell(playerId, spellId);
-    const template = getSpellTemplate(spellId);
+    const template = getSpellTemplate(spellId, SPELL_TEMPLATES);
 
     if (!playerSpell || !template) return;
 
@@ -103,7 +103,7 @@ export class SpellManager {
     currentMana: number
   ): { canCast: boolean; reason?: string } {
     // Check if spell exists
-    const template = getSpellTemplate(spellId);
+    const template = getSpellTemplate(spellId, SPELL_TEMPLATES);
     if (!template) {
       return { canCast: false, reason: "unknown_spell" };
     }

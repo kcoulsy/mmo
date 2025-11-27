@@ -7,7 +7,7 @@ import {
 } from "@shared/messages";
 import { spellManager } from "../managers/spell-manager";
 import { effectManager } from "../managers/effect-manager";
-import { getSpellTemplate } from "@shared/spells";
+import { getSpellTemplate, SPELL_TEMPLATES } from "@shared/spells";
 
 function sendSystemChatMessage(session: any, message: string) {
   const chatMessage: ChatMessage = {
@@ -36,7 +36,7 @@ export const castSpellHandler = registerHandler(
       console.log(`[SPELL] ${session.playerId} attempting to cast ${spellId}`);
 
       // Get the spell template
-      const spellTemplate = getSpellTemplate(spellId);
+      const spellTemplate = getSpellTemplate(spellId, SPELL_TEMPLATES);
       if (!spellTemplate) {
         const resultMessage: SpellCastResultMessage = {
           type: "SPELL_CAST_RESULT",

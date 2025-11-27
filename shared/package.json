@@ -6,6 +6,7 @@
   "types": "dist/index.d.ts",
   "scripts": {
     "build": "tsc",
+    "dev": "tsc --watch",
     "lint": "eslint . --ext ts --report-unused-disable-directives --max-warnings 0",
     "clean": "rm -rf dist"
   },

@@ -27,7 +27,7 @@ import {
 import { ITEM_TEMPLATES } from "@shared/items";
 import { GameClient } from "./client";
 import { usePlayerStore } from "../stores";
-import { getSpellsUnlockedAtLevel, SPELL_TEMPLATES } from "@shared/src/spells";
+import { getSpellsUnlockedAtLevel, SPELL_TEMPLATES } from "@shared/spells";
 
 export class NetworkSystem implements System {
   private remotePlayers: Map<string, EntityId> = new Map(); // playerId -> entityId
@@ -1075,7 +1075,7 @@ export class NetworkSystem implements System {
         experience: 0, // TODO: Add experience tracking if needed
         cooldownUntil: spell.cooldownUntil || 0,
       })),
-      availableSpells: {}, // TODO: Load available spells from server
+      availableSpells: SPELL_TEMPLATES, // Use all available spell templates
     });
 
     // Call the callback if set

@@ -10,6 +10,7 @@ import { GameClient } from './net/client';
 import { NetworkSystem } from './net/networkSystem';
 import { InterpolationSystem } from './net/interpolation';
 import { PlayerJoinRequestMessage } from '../../shared/messages/index';
+import { SPELL_TEMPLATES } from '@shared/spells';
 import { useGameStore, usePlayerStore, useChatStore, useChatBubbleStore, useUIStore, useKeybindStore } from './stores';
 
 import { UIInterface } from "./ui/ui-interface"
@@ -440,7 +441,29 @@ export function App() {
       {/* UI Overlay */}
       <UIInterface
         onSendChatMessage={(message, mode) => networkSystemRef.current?.sendChatMessage(message, mode)}
-        onCastSpell={(spellId) => networkSystemRef.current?.castSpell(spellId)}
+        onCastSpell={(spellId) => {
+          const playerStore = usePlayerStore.getState();
+          const currentTarget = playerStore.target;
+
+          // If spell requires a target, use current target or self for self-targetable spells
+          const spellTemplate = SPELL_TEMPLATES[spellId];
+          if (spellTemplate?.requiresTarget) {
+            if (currentTarget) {
+              // Use current target
+              networkSystemRef.current?.castSpell(spellId, currentTarget.targetEntityId);
+            } else if (spellTemplate.canTargetSelf) {
+              // Self-target if possible
+              networkSystemRef.current?.castSpell(spellId, playerStore.playerId);
+            } else {
+              // No valid target
+              console.warn(`Spell ${spellId} requires a target but none selected`);
+              return;
+            }
+          } else {
+            // Spell doesn't require target
+            networkSystemRef.current?.castSpell(spellId);
+          }
+        }}
         onDisconnect={handleDisconnect}
         showGameMenu={showGameMenu}
       />
