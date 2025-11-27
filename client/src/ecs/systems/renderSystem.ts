@@ -30,10 +30,34 @@ export class RenderSystem implements System {
     const now = Date.now();
     if (now - this.lastLogTime > 1000) {
       this.lastLogTime = now;
+      console.log(`[RENDER] Total entities: ${entities.size}`);
+
+      const renderableEntities = Array.from(entities.values()).filter(
+        (entity) =>
+          entity.components.has("renderable") &&
+          entity.components.has("position")
+      );
+      console.log(`[RENDER] Renderable entities: ${renderableEntities.length}`);
+
+      const gameObjectEntities = renderableEntities.filter((entity) =>
+        entity.components.has("gameObject")
+      );
+      console.log(
+        `[RENDER] Game object entities: ${gameObjectEntities.length}`
+      );
+
+      const playerEntities = renderableEntities.filter((entity) =>
+        entity.components.has("player")
+      );
+      console.log(`[RENDER] Player entities: ${playerEntities.length}`);
     }
 
     // Update camera position based on player position
     this.updateCamera(entities);
+
+    // Apply camera transformation to the entire rendering context
+    this.ctx.save();
+    this.ctx.translate(-this.cameraX, -this.cameraY);
 
     // Clear canvas and draw isometric grid background
     this.drawIsometricGrid();
@@ -60,16 +84,22 @@ export class RenderSystem implements System {
         | GameObject
         | undefined;
 
+      // Debug logging for game objects
+      if (gameObject && now - this.lastLogTime > 1000) {
+        console.log(
+          `[RENDER] Rendering game object: ${gameObject.name} at (${position.x.toFixed(1)}, ${position.y.toFixed(1)}), screen pos: (${(position.x - this.cameraX).toFixed(1)}, ${(position.y - this.cameraY).toFixed(1)})`
+        );
+      }
+
       this.renderEntity(position, renderable, player, gameObject);
     }
+
+    // Restore the camera transformation
+    this.ctx.restore();
   }
 
   private updateCamera(entities: Map<EntityId, Entity>): void {
     // Find the local player
-    const allPlayers = Array.from(entities.values()).filter((entity) =>
-      entity.components.has("player")
-    );
-
     const playerEntity = Array.from(entities.values()).find((entity) => {
       const player = entity.components.get("player") as Player;
       return player && player.isLocal;
@@ -122,17 +152,12 @@ export class RenderSystem implements System {
   }
 
   private drawIsometricGrid(): void {
-    this.ctx.save();
-
-    // Apply camera transformation to the entire drawing context
-    this.ctx.translate(-this.cameraX, -this.cameraY);
-
-    // Clear canvas with background color (need to clear the entire visible area)
+    // Clear canvas with background color (camera transform already applied at higher level)
     this.ctx.fillStyle = "#2d5016"; // Dark green background
     const clearMargin = 200; // Extra margin to ensure we clear beyond visible area
     this.ctx.fillRect(
-      this.cameraX - clearMargin,
-      this.cameraY - clearMargin,
+      -clearMargin,
+      -clearMargin,
       this.canvas.width + clearMargin * 2,
       this.canvas.height + clearMargin * 2
     );
@@ -145,6 +170,8 @@ export class RenderSystem implements System {
     const tileWidth = 64; // Width of isometric tile
     const tileHeight = 32; // Height of isometric tile (half the width for proper isometric projection)
 
+    // Grid bounds are handled by the camera transform applied at higher level
+
     // Draw isometric grid lines
     // First set: lines going from top-left to bottom-right (30-degree lines)
     this.ctx.beginPath();
@@ -153,10 +180,18 @@ export class RenderSystem implements System {
     // Vertical spacing for parallel lines
     const spacing1 = tileHeight * 2;
 
-    for (let i = -10; i < 20; i++) {
+    // Draw lines that intersect the visible area
+    for (let i = -20; i < 40; i++) {
       const yOffset = i * spacing1;
-      this.ctx.moveTo(0, yOffset);
-      this.ctx.lineTo(this.canvas.width, yOffset + this.canvas.width * slope1);
+      // Find intersection points with the screen boundaries
+      const leftY = yOffset;
+      const rightY = yOffset + this.canvas.width * slope1;
+
+      // Only draw if the line intersects the visible area
+      if (leftY <= this.canvas.height || rightY >= 0) {
+        this.ctx.moveTo(0, yOffset);
+        this.ctx.lineTo(this.canvas.width, rightY);
+      }
     }
     this.ctx.stroke();
 
@@ -164,17 +199,20 @@ export class RenderSystem implements System {
     this.ctx.beginPath();
     const slope2 = -slope1; // negative slope for the other direction
 
-    for (let i = -10; i < 20; i++) {
+    for (let i = -20; i < 40; i++) {
       const yOffset = i * spacing1;
-      this.ctx.moveTo(0, yOffset);
-      this.ctx.lineTo(this.canvas.width, yOffset + this.canvas.width * slope2);
+      const rightY = yOffset + this.canvas.width * slope2;
+
+      // Only draw if the line intersects the visible area
+      if (yOffset <= this.canvas.height || rightY >= 0) {
+        this.ctx.moveTo(0, yOffset);
+        this.ctx.lineTo(this.canvas.width, rightY);
+      }
     }
     this.ctx.stroke();
 
     // Reset global alpha
     this.ctx.globalAlpha = 1.0;
-
-    this.ctx.restore();
   }
 
   private renderEntity(

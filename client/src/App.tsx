@@ -48,6 +48,7 @@ export function App() {
     initializeGame();
   }, [isLoggedIn]);
 
+
   // Handle disconnects - this will be set up in the network system
 
   const initializeGame = () => {

@@ -77,9 +77,10 @@ async function main() {
         const currentPlayers = playerManager.getAllPlayers();
         const currentEntities = world.getEntitiesForSync();
         console.log(
-          `[SERVER] Sending WORLD_STATE to client ${client.id} with ${currentPlayers.length} players:`,
+          `[SERVER] Sending WORLD_STATE to client ${client.id} with ${currentPlayers.length} players and ${currentEntities.length} entities:`,
           currentPlayers.map((p) => `${p.id}(${p.name})`)
         );
+        console.log(`[SERVER] Entities being sent: ${currentEntities.length}`);
         const worldStateMessage: WorldStateMessage = {
           type: "WORLD_STATE",
           timestamp: Date.now(),

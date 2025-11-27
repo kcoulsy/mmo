@@ -648,14 +648,12 @@ export class NetworkSystem implements System {
       message.entities?.length || 0,
       "entities"
     );
-    console.log(
-      "[NETWORK] Players in WORLD_STATE:",
-      message.players.map((p) => `${p.id}(${p.name})`)
-    );
-    console.log("[NETWORK] Local player ID:", this.localPlayerId);
 
     // Create a simple hash of the world state to detect changes
-    const stateHash = this.createWorldStateHash(message.players);
+    const stateHash = this.createWorldStateHash(
+      message.players,
+      message.entities
+    );
 
     // Only process if the world state actually changed
     if (stateHash === this.lastWorldStateHash) {
@@ -742,6 +740,10 @@ export class NetworkSystem implements System {
       const hasPlayerComponent = entityData.components.some(
         (c: any) => c.type === "player"
       );
+      const hasGameObjectComponent = entityData.components.some(
+        (c: any) => c.type === "gameObject"
+      );
+
       if (hasPlayerComponent) continue;
 
       let entityId = entityData.id
@@ -751,17 +753,22 @@ export class NetworkSystem implements System {
       if (!entityId && entityData.id) {
         // Create new entity
         entityId = this.world.createEntity();
-        const entityServerId = entityData.id;
-        this.remoteEntities.set(entityServerId, entityId);
+        this.remoteEntities.set(entityData.id!, entityId);
 
         // Add all components from server
         for (const component of entityData.components) {
           this.world.addComponent(entityId, component);
         }
 
-        console.log(
-          `Created entity ${entityData.id || "unknown"} (${entityId}) from world state`
-        );
+        if (hasGameObjectComponent) {
+          console.log(
+            `[NETWORK] Created game object entity ${entityData.id} (${entityId}) from world state`
+          );
+        } else {
+          console.log(
+            `Created non-game-object entity ${entityData.id || "unknown"} (${entityId}) from world state`
+          );
+        }
       } else {
         // Update existing entity components
         for (const component of entityData.components) {
@@ -878,7 +885,8 @@ export class NetworkSystem implements System {
       stats: { hp: number; maxHp: number; level: number };
       spriteId?: string;
       frame?: number;
-    }>
+    }>,
+    entities?: Array<{ id: string; components: any[] }>
   ): string {
     // Sort players by ID for consistent hashing
     const sortedPlayers = [...players].sort((a, b) => a.id.localeCompare(b.id));
@@ -892,6 +900,15 @@ export class NetworkSystem implements System {
       hashParts.push(
         `${player.id}:${Math.round(player.position.x)},${Math.round(player.position.y)},${player.stats.hp},${player.stats.maxHp}`
       );
+    }
+
+    // Include entity count and basic info in hash to detect entity changes
+    if (entities) {
+      const gameObjectCount = entities.filter((e) =>
+        e.components.some((c: any) => c.type === "gameObject")
+      ).length;
+      const totalEntities = entities.length;
+      hashParts.push(`entities:${totalEntities}:${gameObjectCount}`);
     }
 
     return hashParts.join("|");
