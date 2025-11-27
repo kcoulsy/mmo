@@ -26,6 +26,8 @@ export class WebSocketServer {
   > = new Map();
   private nextClientId = 1;
   private playerManager?: any; // PlayerManager - set externally
+  private onConnectionCallback?: (client: ConnectedClient) => void;
+  private onDisconnectionCallback?: (client: ConnectedClient) => void;
 
   constructor(port: number = 8080) {
     this.wss = new WebSocket.Server({ port });
@@ -57,6 +59,11 @@ export class WebSocketServer {
       `Client ${clientId} connected. Total clients: ${this.clients.size}`
     );
 
+    // Call connection callback
+    if (this.onConnectionCallback) {
+      this.onConnectionCallback(client);
+    }
+
     ws.on("message", (data) => {
       try {
         const message = unpack(data as Buffer) as Message;
@@ -70,6 +77,11 @@ export class WebSocketServer {
     ws.on("close", async () => {
       console.log(`Client ${clientId} disconnected`);
       this.clients.delete(clientId);
+
+      // Call disconnection callback
+      if (this.onDisconnectionCallback) {
+        this.onDisconnectionCallback(client);
+      }
 
       // Remove player from game world if they had one
       if (client.playerId && this.playerManager) {
@@ -233,6 +245,16 @@ export class WebSocketServer {
         }
       }
     }
+  }
+
+  // Register connection callback
+  onConnection(callback: (client: ConnectedClient) => void) {
+    this.onConnectionCallback = callback;
+  }
+
+  // Register disconnection callback
+  onDisconnection(callback: (client: ConnectedClient) => void) {
+    this.onDisconnectionCallback = callback;
   }
 
   // Graceful shutdown

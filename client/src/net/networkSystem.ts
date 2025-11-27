@@ -21,13 +21,15 @@ import {
   ClearTargetMessage,
   TargetInfoMessage,
   InventoryUpdateMessage,
+  HarvestResultMessage,
 } from "@shared/messages";
 import { ITEM_TEMPLATES } from "@shared/items";
 import { GameClient } from "./client";
 
 export class NetworkSystem implements System {
   private remotePlayers: Map<string, EntityId> = new Map(); // playerId -> entityId
-  private remoteEntities: Map<string, EntityId> = new Map(); // entityId -> entityId
+  private remoteEntities: Map<string, EntityId> = new Map(); // serverEntityId -> clientEntityId
+  private clientToServerEntities: Map<EntityId, string> = new Map(); // clientEntityId -> serverEntityId
   private localPlayerId?: string;
   private tempLocalEntityId?: EntityId; // Temporary entity ID before server assigns player ID
   private onPlayerPositionUpdate?: (position: {
@@ -374,6 +376,14 @@ export class NetworkSystem implements System {
       "INVENTORY_UPDATE" as any,
       (message: InventoryUpdateMessage) => {
         this.handleInventoryUpdate(message);
+      }
+    );
+
+    // Handle harvest results
+    this.client.onMessage(
+      "HARVEST_RESULT" as any,
+      (message: HarvestResultMessage) => {
+        this.handleHarvestResult(message);
       }
     );
   }
@@ -753,7 +763,10 @@ export class NetworkSystem implements System {
       if (!entityId && entityData.id) {
         // Create new entity
         entityId = this.world.createEntity();
-        this.remoteEntities.set(entityData.id!, entityId);
+        // entityData.id is guaranteed to be defined here due to the if condition above
+        const serverEntityId = entityData.id!;
+        this.remoteEntities.set(serverEntityId, entityId);
+        this.clientToServerEntities.set(entityId, serverEntityId);
 
         // Add all components from server
         for (const component of entityData.components) {
@@ -872,6 +885,7 @@ export class NetworkSystem implements System {
       this.world.destroyEntity(entityId);
     }
     this.remoteEntities.clear();
+    this.clientToServerEntities.clear();
 
     this.localPlayerId = undefined;
   }
@@ -979,10 +993,51 @@ export class NetworkSystem implements System {
     }
   }
 
-  // Send a harvest request
-  harvestObject(gameObjectId: string) {
+  private handleHarvestResult(message: HarvestResultMessage) {
     console.log(
-      `[CLIENT HARVEST] Attempting to harvest object: ${gameObjectId}`
+      `[NETWORK] Received HARVEST_RESULT for ${message.gameObjectId}: ${message.success ? "SUCCESS" : "FAILED"}`
+    );
+
+    if (!message.success) {
+      console.log(`[HARVEST] Harvest failed: ${message.reason}`);
+      return;
+    }
+
+    // Remove the harvested game object from the client world
+    // The server will send a new WORLD_STATE with updated entities
+    const gameObjectEntityId = this.remoteEntities.get(message.gameObjectId);
+    if (gameObjectEntityId) {
+      console.log(
+        `[HARVEST] Removing depleted game object ${message.gameObjectId} (${gameObjectEntityId}) from client world`
+      );
+      this.world.destroyEntity(gameObjectEntityId);
+      this.remoteEntities.delete(message.gameObjectId);
+      this.clientToServerEntities.delete(gameObjectEntityId);
+    }
+
+    // Update player's inventory if items were gained
+    if (message.itemsGained && message.itemsGained.length > 0) {
+      console.log(`[HARVEST] Player gained items:`, message.itemsGained);
+
+      // Trigger inventory update through player store callback
+      if (this.onPlayerUpdate) {
+        // We'll need to get the current inventory and add the new items
+        // For now, just log that items were gained - the next INVENTORY_UPDATE will sync properly
+        console.log(
+          `[HARVEST] Items gained: ${message.itemsGained.map((item) => `${item.quantity}x ${item.itemId}`).join(", ")}`
+        );
+      }
+    }
+
+    if (message.xpGained && message.xpGained > 0) {
+      console.log(`[HARVEST] Gained ${message.xpGained} XP`);
+    }
+  }
+
+  // Send a harvest request
+  harvestObject(clientEntityId: string) {
+    console.log(
+      `[CLIENT HARVEST] Attempting to harvest object: ${clientEntityId}`
     );
 
     if (!this.localPlayerId) {
@@ -990,10 +1045,24 @@ export class NetworkSystem implements System {
       return;
     }
 
+    // Find the server entity ID that corresponds to this client entity ID
+    const serverEntityId = this.clientToServerEntities.get(clientEntityId);
+
+    if (!serverEntityId) {
+      console.log(
+        `[CLIENT HARVEST] Could not find server entity ID for client entity ${clientEntityId}`
+      );
+      return;
+    }
+
+    console.log(
+      `[CLIENT HARVEST] Found server entity ID: ${serverEntityId} for client entity ${clientEntityId}`
+    );
+
     const harvestMessage = {
       type: "HARVEST_OBJECT" as const,
       timestamp: Date.now(),
-      gameObjectId,
+      gameObjectId: serverEntityId,
     };
 
     console.log(`[CLIENT HARVEST] Sending harvest message:`, harvestMessage);

@@ -1,23 +1,8 @@
 // Server entry point
-import { ServerWorld } from "./ecs/world";
 import { DatabaseService } from "./db";
-import { CombatSystem } from "./systems/CombatSystem";
-import { MovementSystem } from "./systems/MovementSystem";
-import { TradeskillSystem } from "./systems/TradeskillSystem";
-import { ItemSystem } from "./systems/ItemSystem";
-import { GameObjectSpawner } from "./world/spawners/GameObjectSpawner";
-import { WebSocketServer } from "./net/websocketServer";
-import { PlayerManager } from "./net/playerManager";
-import { BroadcastSystem } from "./systems/BroadcastSystem";
-import {
-  PlayerJoinRequestMessage,
-  WorldStateMessage,
-  SetTargetMessage,
-  ClearTargetMessage,
-  TargetInfoMessage,
-  HarvestObjectMessage,
-  HarvestResultMessage,
-} from "../../shared/messages/index";
+import { WebSocketServer } from "./core/network";
+import { createWorld } from "./core/world";
+import { registerAllHandlers } from "./core/handlers";
 
 async function main() {
   console.log("Starting Ironwild server...");
@@ -25,192 +10,36 @@ async function main() {
   // Initialize database
   await DatabaseService.initialize();
 
-  // Initialize ECS world
-  const world = new ServerWorld();
-
-  // Initialize GameObject spawner and spawn world objects
-  const gameObjectSpawner = new GameObjectSpawner(world);
-  const worldSize = { width: 2000, height: 2000 }; // Define world bounds
-  gameObjectSpawner.spawnWorldObjects(worldSize);
+  // Create the world singleton
+  const world = createWorld();
 
   // Initialize WebSocket server
   const wsServer = new WebSocketServer(8080);
 
-  // Initialize systems
-  const itemSystem = new ItemSystem(wsServer);
-  itemSystem.setWorld(world);
+  // Wire up session management
+  wsServer.onConnection((client) => {
+    // Create session in the world
+    const session = world.createSession(client);
 
-  // Initialize player manager
-  const playerManager = new PlayerManager(wsServer, world, itemSystem);
+    // Set up the session's send method to use WebSocket
+    session.send = (message: any) => {
+      wsServer.sendToClient(client, message);
+    };
 
-  // Connect player manager to WebSocket server for cleanup
-  wsServer.setPlayerManager(playerManager);
-
-  // Handle player join requests
-  wsServer.onMessage(
-    "PLAYER_JOIN_REQUEST",
-    async (client, message: PlayerJoinRequestMessage) => {
-      // Only allow one player per client connection
-      if (client.playerId) {
-        console.log(
-          `Client ${client.id} already has player ${client.playerId}, ignoring join request`
-        );
-        return;
-      }
-
-      // Create the player
-      console.log(
-        `Received PLAYER_JOIN_REQUEST with playerName: "${message.playerName}" from client ${client.id}`
-      );
-      const playerName =
-        message.playerName || `Adventurer_${Date.now().toString().slice(-4)}`;
-      console.log(`Using player name: "${playerName}"`);
-
-      try {
-        await playerManager.createPlayer(client, {
-          name: playerName,
-          playerId: message.playerId,
-        });
-        console.log(`Player ${playerName} joined from client ${client.id}`);
-
-        // Send current world state to the new player so they see existing players and entities
-        const currentPlayers = playerManager.getAllPlayers();
-        const currentEntities = world.getEntitiesForSync();
-        console.log(
-          `[SERVER] Sending WORLD_STATE to client ${client.id} with ${currentPlayers.length} players and ${currentEntities.length} entities:`,
-          currentPlayers.map((p) => `${p.id}(${p.name})`)
-        );
-        console.log(`[SERVER] Entities being sent: ${currentEntities.length}`);
-        const worldStateMessage: WorldStateMessage = {
-          type: "WORLD_STATE",
-          timestamp: Date.now(),
-          players: currentPlayers,
-          entities: currentEntities,
-        };
-        wsServer.sendToClient(client, worldStateMessage);
-      } catch (error) {
-        console.error(`Error creating player ${playerName}:`, error);
-        // Could send an error message to the client here
-      }
-    }
-  );
-
-  // Handle target setting
-  wsServer.onMessage(
-    "SET_TARGET" as any,
-    (client, message: SetTargetMessage) => {
-      if (!client.playerId) return;
-
-      console.log(
-        `Player ${client.playerId} targeting entity ${message.targetEntityId}`
-      );
-
-      // Get target information
-      const targetInfo = playerManager.getTargetInfo(message.targetEntityId);
-      console.log(`Target info result:`, targetInfo);
-      if (targetInfo) {
-        const targetMessage: TargetInfoMessage = {
-          type: "TARGET_INFO" as any,
-          timestamp: Date.now(),
-          targetEntityId: message.targetEntityId,
-          targetInfo,
-        };
-        console.log(`Sending target info:`, targetMessage);
-        wsServer.sendToClient(client, targetMessage);
-      } else {
-        console.log(
-          `No target info found for entity ${message.targetEntityId}`
-        );
-      }
-    }
-  );
-
-  // Handle target clearing
-  wsServer.onMessage(
-    "CLEAR_TARGET" as any,
-    (client, message: ClearTargetMessage) => {
-      if (!client.playerId) return;
-
-      console.log(`[SERVER] Player ${client.playerId} clearing target`);
-
-      // Send empty target info to clear the UI
-      const clearTargetMessage: TargetInfoMessage = {
-        type: "TARGET_INFO",
-        timestamp: Date.now(),
-        targetEntityId: "",
-        targetInfo: {
-          name: "",
-          type: "player",
-          position: { x: 0, y: 0, z: 0 },
-        },
-      };
-      console.log(`[SERVER] Sending clear target message:`, clearTargetMessage);
-      wsServer.sendToClient(client, clearTargetMessage);
-    }
-  );
-
-  // Handle object harvesting
-  wsServer.onMessage(
-    "HARVEST_OBJECT" as any,
-    async (client, message: HarvestObjectMessage) => {
-      if (!client.playerId) return;
-
-      console.log(
-        `Player ${client.playerId} attempting to harvest ${message.gameObjectId}`
-      );
-
-      const result = await tradeskillSystem.harvest(
-        client.playerId,
-        message.gameObjectId
-      );
-
-      const harvestResultMessage: HarvestResultMessage = {
-        type: "HARVEST_RESULT",
-        timestamp: Date.now(),
-        gameObjectId: message.gameObjectId,
-        success: result.success,
-        reason: result.reason,
-        xpGained: result.xpGained,
-      };
-
-      wsServer.sendToClient(client, harvestResultMessage);
-    }
-  );
-
-  // Initialize and add systems
-  const tradeskillSystem = new TradeskillSystem(itemSystem);
-  tradeskillSystem.setWorld(world);
-
-  world.addSystem(new CombatSystem());
-  world.addSystem(new MovementSystem(playerManager));
-  world.addSystem(tradeskillSystem);
-  world.addSystem(itemSystem);
-  world.addSystem(new BroadcastSystem(wsServer, playerManager));
-
-  // Create a test NPC entity
-  const npcId = world.createEntity();
-  world.addComponent(npcId, {
-    type: "position",
-    x: 100,
-    y: 100,
-    z: 0,
+    console.log(`Session created for client ${client.id}`);
   });
-  world.addComponent(npcId, {
-    type: "renderable",
-    spriteId: "npc_guard",
-    layer: 1,
-    frame: 0,
+
+  wsServer.onDisconnection((client) => {
+    world.removeSession(client.id);
+    console.log(`Session removed for client ${client.id}`);
   });
-  world.addComponent(npcId, {
-    type: "stats",
-    hp: 200,
-    maxHp: 200,
-    mp: 0,
-    maxMp: 0,
-    attack: 15,
-    defense: 10,
-    moveSpeed: 0, // Stationary NPC
-  });
+
+  // Initialize world objects
+  const worldSize = { width: 2000, height: 2000 };
+  world.initializeWorldObjects(worldSize);
+
+  // Register all message handlers
+  registerAllHandlers(wsServer, world);
 
   // Game tick loop (server-side)
   const TICK_RATE = 20; // 20 ticks per second
