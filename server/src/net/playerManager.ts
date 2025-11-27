@@ -130,7 +130,14 @@ export class PlayerManager {
         stats: {
           hp: stats.hp,
           maxHp: stats.maxHp,
+          mp: stats.mp,
+          maxMp: stats.maxMp,
+          attack: stats.attack,
+          defense: stats.defense,
+          moveSpeed: stats.moveSpeed,
           level: 1, // TODO: Get from player data
+          experience: 0,
+          experienceToNext: 100,
         },
       },
     };

@@ -43,8 +43,10 @@ async function main() {
       }
 
       // Create the player
+      const playerName =
+        message.playerName || `Adventurer_${Date.now().toString().slice(-4)}`;
       playerManager.createPlayer(client, {
-        name: message.playerName,
+        name: playerName,
         playerId: message.playerId,
       });
       console.log(

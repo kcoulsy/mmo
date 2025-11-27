@@ -22,7 +22,7 @@ export interface NetworkMessage {
 // Player connection messages
 export interface PlayerJoinRequestMessage extends NetworkMessage {
   type: "PLAYER_JOIN_REQUEST";
-  playerName: string;
+  playerName?: string; // Optional - server will generate if not provided
   playerId?: string; // Optional - server will assign if not provided
 }
 export interface PlayerJoinMessage extends NetworkMessage {

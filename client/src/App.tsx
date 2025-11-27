@@ -142,10 +142,15 @@ export function App() {
       setPlayer({ position });
     });
 
-    // Update player store with initial data (will be updated with server ID later)
+    // Set callback to update player store with server data
+    networkSystem.setPlayerUpdateCallback((playerData) => {
+      setPlayer(playerData);
+    });
+
+    // Update player store with initial data (will be updated with server data later)
     setPlayer({
       id: tempPlayerId,
-      name: 'Player',
+      name: 'Connecting...',
       stats: {
         hp: 100,
         maxHp: 100,
@@ -178,7 +183,7 @@ export function App() {
           const joinMessage: PlayerJoinRequestMessage = {
             type: 'PLAYER_JOIN_REQUEST',
             timestamp: Date.now(),
-            playerName: 'Player',
+            // Let server generate the player name
             // Don't send playerId - server will assign one
           };
           gameClient.send(joinMessage);

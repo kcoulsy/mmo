@@ -1,12 +1,14 @@
 "use client"
 
-import { useState } from "react"
+import { usePlayerStore } from "../stores/playerStore"
 
 export function PlayerFrame() {
-  const [health, setHealth] = useState(85)
-  const [mana, setMana] = useState(60)
-  const maxHealth = 100
-  const maxMana = 100
+  const { name, stats } = usePlayerStore()
+  const health = stats.hp
+  const mana = stats.mp
+  const maxHealth = stats.maxHp
+  const maxMana = stats.maxMp
+  const level = stats.level
 
   return (
     <div className="w-80 bg-card/90 border-2 border-border rounded-lg backdrop-blur-sm p-3">
@@ -19,10 +21,10 @@ export function PlayerFrame() {
         </div>
         <div className="flex-1">
           <div className="flex items-center justify-between">
-            <h3 className="text-foreground font-semibold text-sm">Shadowblade</h3>
-            <span className="text-accent text-xs font-bold">85</span>
+            <h3 className="text-foreground font-semibold text-sm">{name}</h3>
+            <span className="text-accent text-xs font-bold">{level}</span>
           </div>
-          <p className="text-muted-foreground text-xs">Rogue • Level 85</p>
+          <p className="text-muted-foreground text-xs">Adventurer • Level {level}</p>
         </div>
       </div>
 

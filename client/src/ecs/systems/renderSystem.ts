@@ -182,8 +182,8 @@ export class RenderSystem implements System {
       this.ctx.font = "12px Arial";
       this.ctx.textAlign = "center";
 
-      // Display player ID truncated to first 8 characters
-      const displayName = player.id.substring(0, 8);
+      // Display player name (fallback to ID if name not available)
+      const displayName = (player.name || player.id).substring(0, 8);
       this.ctx.strokeText(displayName, 0, -25);
       this.ctx.fillText(displayName, 0, -25);
     }

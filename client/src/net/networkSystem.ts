@@ -28,6 +28,16 @@ export class NetworkSystem implements System {
     y: number;
     z: number;
   }) => void;
+  private onPlayerUpdate?: (
+    player: Partial<{
+      id: string;
+      name: string;
+      stats: any;
+      position: { x: number; y: number; z: number };
+      isConnected: boolean;
+      isLocal: boolean;
+    }>
+  ) => void;
   private lastInputTime = 0;
   private inputSendInterval = 50; // Send input every 50ms (20Hz) when active
   private idleInputSendInterval = 1000; // Send input every 1s when idle
@@ -184,6 +194,22 @@ export class NetworkSystem implements System {
     this.onPlayerPositionUpdate = callback;
   }
 
+  // Set callback for general player updates (name, stats, etc.)
+  setPlayerUpdateCallback(
+    callback: (
+      player: Partial<{
+        id: string;
+        name: string;
+        stats: any;
+        position: { x: number; y: number; z: number };
+        isConnected: boolean;
+        isLocal: boolean;
+      }>
+    ) => void
+  ) {
+    this.onPlayerUpdate = callback;
+  }
+
   // Set the server-assigned player ID and update the temp entity
   setServerPlayerId(playerId: string) {
     console.log(`[NETWORK] Setting server player ID: ${playerId}`);
@@ -263,7 +289,7 @@ export class NetworkSystem implements System {
     const { playerId, playerData } = message;
 
     console.log(
-      `[NETWORK] Received PLAYER_JOIN: ${playerId} at position (${playerData.position.x}, ${playerData.position.y})`
+      `[NETWORK] Received PLAYER_JOIN: ${playerId} at position (${playerData.position.x}, ${playerData.position.y}) with name: ${playerData.name}`
     );
 
     // If we don't have a localPlayerId yet, this is our player
@@ -271,9 +297,8 @@ export class NetworkSystem implements System {
       console.log(
         `[NETWORK] This is our player join: ${playerId}, tempEntityId: ${this.tempLocalEntityId}`
       );
-      this.setServerPlayerId(playerId);
 
-      // Update position to match server
+      // Update position and player data before setting the server ID
       if (this.tempLocalEntityId) {
         const position = this.world.getComponent(
           this.tempLocalEntityId,
@@ -292,7 +317,7 @@ export class NetworkSystem implements System {
             `[CLIENT] Position updated to: (${position.x.toFixed(1)}, ${position.y.toFixed(1)})`
           );
 
-          // Update the player store position
+          // Update the player store with position, name, and stats
           if (this.onPlayerPositionUpdate) {
             this.onPlayerPositionUpdate({
               x: position.x,
@@ -300,12 +325,42 @@ export class NetworkSystem implements System {
               z: position.z,
             });
           }
+
+          // Update player store with name and stats from server
+          if (this.onPlayerUpdate) {
+            this.onPlayerUpdate({
+              id: playerId,
+              name: playerData.name,
+              stats: {
+                ...this.world.getComponent(this.tempLocalEntityId, "stats"),
+                ...playerData.stats,
+              },
+              position: {
+                x: position.x,
+                y: position.y,
+                z: position.z,
+              },
+              isConnected: true,
+              isLocal: true,
+            });
+          }
+
+          // Update the ECS player component with the server-assigned name
+          const playerComponent = this.world.getComponent(
+            this.tempLocalEntityId,
+            "player"
+          );
+          if (playerComponent) {
+            playerComponent.name = playerData.name;
+          }
         } else {
           console.log(`[NETWORK] Position component not found on temp entity`);
         }
       } else {
         console.log(`[NETWORK] No tempLocalEntityId to update position`);
       }
+
+      this.setServerPlayerId(playerId);
       return;
     }
 
